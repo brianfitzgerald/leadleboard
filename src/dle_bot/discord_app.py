@@ -62,21 +62,40 @@ async def fetch_parent(client: discord.Client, config: Config) -> discord.TextCh
     return channel
 
 
+async def discover_public_threads(
+    parent: discord.TextChannel,
+    guild: discord.Guild,
+) -> list[discord.Thread]:
+    """Return active and archived public threads under a channel."""
+    public_types = {discord.ChannelType.news_thread, discord.ChannelType.public_thread}
+    active_threads = await guild.active_threads()
+    threads = {
+        thread.id: thread
+        for thread in active_threads
+        if thread.parent_id == parent.id and thread.type in public_types
+    }
+    async for thread in parent.archived_threads(limit=None):
+        threads[thread.id] = thread
+    return sorted(
+        threads.values(),
+        key=lambda item: (item.archived, item.name.casefold(), item.id),
+    )
+
+
 async def collect_report(
     client: discord.Client,
     config: Config,
     period: ReportingPeriod,
 ) -> WeeklyReport:
-    """Read configured threads and build one weekly report."""
+    """Read the parent and its public threads and build a weekly report."""
+    parent = await fetch_parent(client, config)
+    channels: list[discord.TextChannel | discord.Thread] = [
+        parent,
+        *await discover_public_threads(parent, parent.guild),
+    ]
     scores: list[Score] = []
     async with httpx.AsyncClient(timeout=10.0) as http_client:
-        for game, thread_id in config.thread_ids.items():
-            channel = await client.fetch_channel(thread_id)
-            if not isinstance(channel, discord.Thread):
-                raise RuntimeError(f"{game.value} ID must identify a Discord thread")
-            if channel.guild.id != config.guild_id or channel.parent_id != config.channel_id:
-                raise RuntimeError(f"{game.value} thread is not under the configured channel")
-
+        for channel in channels:
             async for message in channel.history(
                 after=period.start.astimezone(UTC),
                 before=period.end.astimezone(UTC),
@@ -85,27 +104,29 @@ async def collect_report(
             ):
                 if message.author.bot:
                     continue
-                if game is Game.SIZE_IT_UP:
-                    value = parse_size_it_up(message.content)
-                elif game is Game.RNGDLE:
-                    value = parse_rngdle(message.content)
-                else:
-                    descriptions = [
-                        embed.description
-                        for embed in message.embeds
-                        if embed.description is not None
-                    ]
-                    value = await parse_dartwords(message.content, descriptions, http_client)
-                if value is None:
-                    continue
-                scores.append(
-                    Score(
-                        user_id=message.author.id,
-                        display_name=message.author.display_name,
-                        game=game,
-                        value=value,
+                descriptions = [
+                    embed.description for embed in message.embeds if embed.description is not None
+                ]
+                values = {
+                    Game.SIZE_IT_UP: parse_size_it_up(message.content),
+                    Game.RNGDLE: parse_rngdle(message.content),
+                    Game.DARTWORDS: await parse_dartwords(
+                        message.content,
+                        descriptions,
+                        http_client,
+                    ),
+                }
+                for game, value in values.items():
+                    if value is None:
+                        continue
+                    scores.append(
+                        Score(
+                            user_id=message.author.id,
+                            display_name=message.author.display_name,
+                            game=game,
+                            value=value,
+                        )
                     )
-                )
 
     return build_report(scores, period.week_start, period.week_end)
 
@@ -130,10 +151,10 @@ async def publish_report(channel: discord.TextChannel, report: WeeklyReport) -> 
     """Post one report message or a text attachment when it is large."""
     marker = report_marker(report)
     text = render_text(report)
-    embed = discord.Embed(title=marker, color=discord.Color.blue())
+    embed = discord.Embed(color=discord.Color.gold())
     total_length = len(marker)
     field_count = 0
-    for title, lines in report_sections(report):
+    for title, lines in report_sections(report, markdown=True):
         chunks: list[str] = []
         current = ""
         for line in lines:
@@ -182,33 +203,20 @@ async def check_access(client: discord.Client, config: Config) -> list[str]:
     if denied:
         raise RuntimeError(f"Missing channel permissions: {', '.join(denied)}")
 
-    public_types = {discord.ChannelType.news_thread, discord.ChannelType.public_thread}
-    active_threads = await guild.active_threads()
-    threads = {
-        thread.id: thread
-        for thread in active_threads
-        if thread.parent_id == parent.id and thread.type in public_types
-    }
-    async for thread in parent.archived_threads(limit=None):
-        threads[thread.id] = thread
+    threads = await discover_public_threads(parent, guild)
 
-    if not threads:
-        raise RuntimeError(f"No public threads were found under #{parent.name}")
-    for game, thread_id in config.thread_ids.items():
-        if thread_id not in threads:
-            raise RuntimeError(
-                f"{game.value} is not an accessible public thread under #{parent.name}"
-            )
+    message_count = 0
+    async for _ in parent.history(limit=1):
+        message_count = 1
+        break
+    parent_sample = "1 message read" if message_count else "empty"
 
     details = [
         f"Guild: {guild.name}",
-        f"Report channel: #{parent.name}",
+        f"Report channel: #{parent.name} ({parent_sample})",
         f"Public threads: {len(threads)}",
     ]
-    for thread in sorted(
-        threads.values(),
-        key=lambda item: (item.archived, item.name.casefold(), item.id),
-    ):
+    for thread in threads:
         message_count = 0
         async for _ in thread.history(limit=1):
             message_count = 1

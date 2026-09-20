@@ -8,8 +8,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
-from dle_bot.models import Game
-
 
 @dataclass(frozen=True, slots=True)
 class Config:
@@ -18,7 +16,6 @@ class Config:
     token: str
     guild_id: int
     channel_id: int
-    thread_ids: dict[Game, int]
     timezone: ZoneInfo
     report_time: time
     state_path: Path
@@ -32,9 +29,6 @@ class Config:
             "DISCORD_TOKEN": os.getenv("DISCORD_TOKEN"),
             "DISCORD_GUILD_ID": os.getenv("DISCORD_GUILD_ID"),
             "DISCORD_CHANNEL_ID": os.getenv("DISCORD_CHANNEL_ID"),
-            "SIZE_IT_UP_THREAD_ID": os.getenv("SIZE_IT_UP_THREAD_ID"),
-            "RNGDLE_THREAD_ID": os.getenv("RNGDLE_THREAD_ID"),
-            "DARTWORDS_THREAD_ID": os.getenv("DARTWORDS_THREAD_ID"),
         }
         missing = [name for name, value in required.items() if not value]
         if missing:
@@ -62,11 +56,6 @@ class Config:
             token=required["DISCORD_TOKEN"] or "",
             guild_id=ids["DISCORD_GUILD_ID"],
             channel_id=ids["DISCORD_CHANNEL_ID"],
-            thread_ids={
-                Game.SIZE_IT_UP: ids["SIZE_IT_UP_THREAD_ID"],
-                Game.RNGDLE: ids["RNGDLE_THREAD_ID"],
-                Game.DARTWORDS: ids["DARTWORDS_THREAD_ID"],
-            },
             timezone=timezone,
             report_time=report_time,
             state_path=state_path,

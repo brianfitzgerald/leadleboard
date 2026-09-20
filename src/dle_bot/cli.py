@@ -56,8 +56,8 @@ class DleBotCli:
 
         print(asyncio.run(run_discord_action(config.token, action)))
 
-    def run(self) -> None:
-        """Post the scheduled weekly report once, then exit."""
+    def run(self, ignore_schedule: bool = False) -> None:
+        """Post the weekly report once, with an optional schedule bypass."""
         config = Config.load()
         now = datetime.now(config.timezone)
         period = period_for_week(
@@ -65,7 +65,7 @@ class DleBotCli:
             config.report_time,
             config.timezone,
         )
-        if not is_post_window(now, period.end):
+        if not ignore_schedule and not is_post_window(now, period.end):
             raise RuntimeError(
                 f"Posting is allowed only for 10 minutes from {period.end.isoformat()}"
             )

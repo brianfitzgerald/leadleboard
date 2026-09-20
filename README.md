@@ -18,8 +18,8 @@ Install the project and development tools:
 uv sync
 ```
 
-Copy `.env.example` to `.env`. Set the bot token, guild ID, parent channel ID, and three
-thread IDs. `.env` is ignored by Git.
+Copy `.env.example` to `.env`. Set the bot token, guild ID, and parent channel ID.
+`.env` is ignored by Git.
 
 ## Add the bot to Discord
 
@@ -31,15 +31,16 @@ thread IDs. `.env` is ignored by Git.
 5. Select View Channels, Read Message History, Send Messages, Embed Links, and Attach Files.
 6. Open the generated URL, select the server, and authorize the bot.
 7. Confirm that the bot role has the same five permissions in the parent channel settings.
-8. Enable Developer Mode in Discord. Copy the server, parent channel, and thread IDs into `.env`.
-9. Check permissions and read one message from every public active and archived thread:
+8. Enable Developer Mode in Discord. Copy the server and parent channel IDs into `.env`.
+9. Check permissions and read one message from the parent and each public thread:
 
 ```sh
 uv run dle-bot check
 ```
 
-The configured game threads must be public threads under the configured parent channel. The bot
-does not need Administrator, Manage Threads, Create Threads, or Send Messages in Threads.
+The bot scans the parent channel and all active and archived public threads. It detects the
+game from each message. Thread names do not affect parsing. The bot does not need Administrator,
+Manage Threads, Create Threads, or Send Messages in Threads.
 
 ## Preview
 
@@ -59,6 +60,14 @@ uv run dle-bot preview --week 2026-09-14
 
 `run` posts only during the first ten minutes after the configured Sunday report time. It
 uses a locked state file and the Discord report marker to prevent a second weekly post.
+
+To post outside the schedule window, use:
+
+```sh
+uv run dle-bot run --ignore-schedule
+```
+
+This option does not bypass the weekly duplicate protection.
 
 Open the current user's crontab:
 

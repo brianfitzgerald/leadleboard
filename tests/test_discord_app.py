@@ -10,8 +10,9 @@ import pytest
 
 import dle_bot.discord_app as discord_app
 from dle_bot.config import Config
-from dle_bot.discord_app import check_access, find_existing_report
+from dle_bot.discord_app import check_access, collect_report, find_existing_report
 from dle_bot.models import Game, WeeklyReport
+from dle_bot.report import report_marker
 from dle_bot.schedule import ReportingPeriod
 
 
@@ -45,9 +46,16 @@ class FakeParent:
     id = 10
     name = "games"
 
-    def __init__(self, archived: list[FakeThread], *, attach_files: bool = True) -> None:
+    def __init__(
+        self,
+        archived: list[FakeThread],
+        *,
+        attach_files: bool = True,
+        has_message: bool = True,
+    ) -> None:
         self.archived = archived
         self.attach_files = attach_files
+        self.has_message = has_message
 
     def permissions_for(self, member: object) -> SimpleNamespace:
         return SimpleNamespace(
@@ -61,6 +69,10 @@ class FakeParent:
     async def archived_threads(self, **kwargs: object) -> AsyncIterator[FakeThread]:
         for thread in self.archived:
             yield thread
+
+    async def history(self, **kwargs: object) -> AsyncIterator[object]:
+        if self.has_message:
+            yield object()
 
 
 class FakeGuild:
@@ -76,13 +88,12 @@ class FakeGuild:
         return self.active
 
 
-def config(thread_ids: tuple[int, int, int]) -> Config:
-    """Build test configuration with the supplied game threads."""
+def config() -> Config:
+    """Build test configuration."""
     return Config(
         token="token",
         guild_id=1,
         channel_id=10,
-        thread_ids=dict(zip(Game, thread_ids, strict=True)),
         timezone=ZoneInfo("America/Chicago"),
         report_time=time(21),
         state_path=Path("state"),
@@ -114,7 +125,7 @@ async def test_find_existing_report(author_id: int, expected: int | None) -> Non
             yield SimpleNamespace(
                 id=123,
                 author=SimpleNamespace(id=author_id),
-                content="Weekly High Scores | 2026-09-14 to 2026-09-20",
+                content=report_marker(report),
             )
 
     report = WeeklyReport(
@@ -146,26 +157,15 @@ async def test_check_access_reads_all_public_threads(monkeypatch: pytest.MonkeyP
         monkeypatch,
         FakeParent(archived),
         FakeGuild(active),
-        config((11, 12, 13)),
+        config(),
     )
 
+    assert "Report channel: #games (1 message read)" in details
     assert "Public threads: 3" in details
     assert "active: #Size It Up (1 message read)" in details
     assert "active: #RNGdle (empty)" in details
     assert "archived: #Dartwords (1 message read)" in details
     assert all("Private" not in detail for detail in details)
-
-
-async def test_check_access_requires_configured_thread(monkeypatch: pytest.MonkeyPatch) -> None:
-    active = [FakeThread(11, "Size It Up", discord.ChannelType.public_thread)]
-
-    with pytest.raises(RuntimeError, match="RNGdle is not an accessible public thread"):
-        await run_access_check(
-            monkeypatch,
-            FakeParent([]),
-            FakeGuild(active),
-            config((11, 404, 405)),
-        )
 
 
 async def test_check_access_requires_attach_files(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -174,17 +174,81 @@ async def test_check_access_requires_attach_files(monkeypatch: pytest.MonkeyPatc
             monkeypatch,
             FakeParent([], attach_files=False),
             FakeGuild([]),
-            config((11, 12, 13)),
+            config(),
         )
 
 
-async def test_check_access_requires_public_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_check_access_allows_no_public_threads(monkeypatch: pytest.MonkeyPatch) -> None:
     private = [FakeThread(99, "Private", discord.ChannelType.private_thread)]
 
-    with pytest.raises(RuntimeError, match="No public threads were found"):
-        await run_access_check(
-            monkeypatch,
-            FakeParent([]),
-            FakeGuild(private),
-            config((11, 12, 13)),
-        )
+    details = await run_access_check(
+        monkeypatch,
+        FakeParent([], has_message=False),
+        FakeGuild(private),
+        config(),
+    )
+
+    assert "Report channel: #games (empty)" in details
+    assert "Public threads: 0" in details
+
+
+async def test_collect_report_parses_each_game_from_any_channel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = SimpleNamespace(id=42, display_name="Ada", bot=False)
+    bot = SimpleNamespace(id=7, display_name="Bot", bot=True)
+    combined = SimpleNamespace(
+        author=user,
+        content=(
+            "Size It Up\nOverall Score 254\nhttps://magnitudle.com/size-it-up\n"
+            "RNGdle 🎲 122228\n203,506 EP\nhttps://rngdle.com"
+        ),
+        embeds=[],
+    )
+    dartwords = SimpleNamespace(
+        author=user,
+        content="https://www.dartwords.com/share?id=tl7i9vhphy",
+        embeds=[SimpleNamespace(description="I solved today's Dartwords in 5 guesses!")],
+    )
+    ignored = SimpleNamespace(
+        author=bot,
+        content="Size It Up\nOverall Score 500\nhttps://magnitudle.com/size-it-up",
+        embeds=[],
+    )
+
+    class HistoryChannel:
+        """Provide messages for report collection."""
+
+        def __init__(self, messages: list[SimpleNamespace]) -> None:
+            self.messages = messages
+            self.guild = SimpleNamespace()
+
+        async def history(self, **kwargs: object) -> AsyncIterator[SimpleNamespace]:
+            for message in self.messages:
+                yield message
+
+    parent = HistoryChannel([combined, ignored])
+    thread = HistoryChannel([dartwords])
+
+    async def fetch_parent(client: discord.Client, current: Config) -> discord.TextChannel:
+        return cast(discord.TextChannel, parent)
+
+    async def discover_threads(
+        current: discord.TextChannel,
+        guild: discord.Guild,
+    ) -> list[discord.Thread]:
+        return [cast(discord.Thread, thread)]
+
+    monkeypatch.setattr(discord_app, "fetch_parent", fetch_parent)
+    monkeypatch.setattr(discord_app, "discover_public_threads", discover_threads)
+    period = ReportingPeriod(
+        start=datetime(2026, 9, 14, tzinfo=UTC),
+        end=datetime(2026, 9, 21, tzinfo=UTC),
+    )
+
+    report = await collect_report(cast(discord.Client, object()), config(), period)
+
+    assert report.games[Game.SIZE_IT_UP][0].score.value == 254
+    assert report.games[Game.RNGDLE][0].score.value == 203506
+    assert report.games[Game.DARTWORDS][0].score.value == 5
+    assert report.overall[0].display_name == "Ada"
