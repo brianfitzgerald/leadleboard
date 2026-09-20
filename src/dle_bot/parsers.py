@@ -9,8 +9,9 @@ import httpx
 
 LOGGER = logging.getLogger(__name__)
 
-SIZE_SCORE_PATTERN = re.compile(r"Overall\s+Score\s+([0-9]{1,3})", re.IGNORECASE)
-RNGDLE_SCORE_PATTERN = re.compile(r"(?m)^\s*([0-9][0-9,]*)\s+EP\s*$", re.IGNORECASE)
+SIZE_SCORE_PATTERN = re.compile(r"Overall\s+Score\s+([0-9]{1,3})\b", re.IGNORECASE)
+RNGDLE_SCORE_PATTERN = re.compile(r"(?m)^\s*([0-9][0-9,]{0,14})\s+EP\s*$", re.IGNORECASE)
+RNGDLE_MAX_SCORE = 999_999_999
 DARTWORDS_GUESSES_PATTERN = re.compile(
     r"solved\s+(?:today(?:'s|\u2019s)\s+)?Dartwords\s+in\s+([0-9]{1,2})\s+guess(?:es)?",
     re.IGNORECASE,
@@ -54,7 +55,8 @@ def parse_rngdle(content: str) -> int | None:
     match = RNGDLE_SCORE_PATTERN.search(content)
     if match is None:
         return None
-    return int(match.group(1).replace(",", ""))
+    value = int(match.group(1).replace(",", ""))
+    return value if value <= RNGDLE_MAX_SCORE else None
 
 
 def parse_dartwords_description(description: str) -> int | None:

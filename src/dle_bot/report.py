@@ -1,5 +1,9 @@
 """Render weekly reports for Discord and the terminal."""
 
+from datetime import date
+
+from discord.utils import escape_markdown
+
 from dle_bot.models import Game, WeeklyReport
 
 GAME_EMOJIS = {
@@ -10,9 +14,9 @@ GAME_EMOJIS = {
 RANK_EMOJIS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 
-def report_marker(report: WeeklyReport) -> str:
+def report_marker(week_start: date, week_end: date) -> str:
     """Return the unique visible marker for a weekly report."""
-    dates = f"{report.week_start:%b %d} - {report.week_end:%b %d, %Y}"
+    dates = f"{week_start:%b %d} - {week_end:%b %d, %Y}"
     return f"## 🏆 Weekly High Scores\n-# {dates}"
 
 
@@ -59,7 +63,7 @@ def report_sections(
             f"{GAME_EMOJIS[game]} `{format_value(game, standing.values[game])}`" for game in Game
         )
         overall_lines.append(
-            f"{format_rank(standing.rank)} **{standing.display_name}** • "
+            f"{format_rank(standing.rank)} **{escape_markdown(standing.display_name)}** • "
             f"**{format_points(standing.points)}**\n> {values}"
         )
     if not overall_lines:
@@ -69,7 +73,8 @@ def report_sections(
     for game in Game:
         lines = [
             (
-                f"{format_rank(standing.rank)} **{standing.score.display_name}** — "
+                f"{format_rank(standing.rank)} "
+                f"**{escape_markdown(standing.score.display_name)}** — "
                 f"`{format_value(game, standing.score.value)}` • "
                 f"**{format_points(standing.points)}**"
                 if markdown
@@ -87,7 +92,7 @@ def report_sections(
 
 def render_text(report: WeeklyReport) -> str:
     """Render the full report as plain text."""
-    lines = [report_marker(report)]
+    lines = [report_marker(report.week_start, report.week_end)]
     for title, section_lines in report_sections(report):
         lines.extend(("", title, *section_lines))
     return "\n".join(lines)

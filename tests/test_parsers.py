@@ -22,6 +22,7 @@ https://magnitudle.com/size-it-up""",
         ),
         ("Size It Up\nOverall Score 501\nhttps://magnitudle.com/size-it-up", None),
         ("Overall Score 254", None),
+        ("Size It Up\nOverall Score 2540\nhttps://magnitudle.com/size-it-up", None),
     ],
 )
 def test_parse_size_it_up(content: str, expected: int | None) -> None:
@@ -34,6 +35,9 @@ def test_parse_size_it_up(content: str, expected: int | None) -> None:
         ("RNGdle 🎲 122228\n\n203,506 EP\nhttps://rngdle.com", 203506),
         ("RNGdle\nnot a score\nhttps://rngdle.com", None),
         ("203,506 EP", None),
+        ("RNGdle\n999,999,999 EP\nhttps://rngdle.com", 999_999_999),
+        ("RNGdle\n1,000,000,000 EP\nhttps://rngdle.com", None),
+        (f"RNGdle\n{'9' * 1500} EP\nhttps://rngdle.com", None),
     ],
 )
 def test_parse_rngdle(content: str, expected: int | None) -> None:

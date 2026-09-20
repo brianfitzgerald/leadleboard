@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import discord
 import fire
@@ -35,11 +35,11 @@ class DleBotCli:
             print(line)
         print("Configuration, permissions, and public thread access are valid.")
 
-    def preview(self, week: str | None = None) -> None:
+    def preview(self, week: str | int | None = None) -> None:
         """Print a weekly report without posting or changing post state."""
         config = Config.load()
         now = datetime.now(config.timezone)
-        week_start = current_week_start(now) if week is None else date.fromisoformat(week)
+        week_start = current_week_start(now) if week is None else date.fromisoformat(str(week))
         period = period_for_week(
             week_start,
             config.report_time,
@@ -48,11 +48,11 @@ class DleBotCli:
         if period.start > now:
             raise ValueError("The preview week cannot be in the future")
         if period.end > now:
-            period = ReportingPeriod(start=period.start, end=now)
+            period = ReportingPeriod(week_start=week_start, start=period.start, end=now)
 
         async def action(client: discord.Client) -> str:
-            report = await collect_report(client, config, period)
-            return render_text(report)
+            parent = await fetch_parent(client, config)
+            return render_text(await collect_report(parent, period))
 
         print(asyncio.run(run_discord_action(config.token, action)))
 
@@ -69,6 +69,12 @@ class DleBotCli:
             raise RuntimeError(
                 f"Posting is allowed only for 10 minutes from {period.end.isoformat()}"
             )
+        if now < period.end:
+            period = period_for_week(
+                period.week_start - timedelta(days=7),
+                config.report_time,
+                config.timezone,
+            )
 
         with PostState(config.state_path) as state:
             if state.was_posted(period.week_start):
@@ -76,12 +82,11 @@ class DleBotCli:
                 return
 
             async def action(client: discord.Client) -> tuple[int, bool]:
-                report = await collect_report(client, config, period)
                 parent = await fetch_parent(client, config)
-                existing_id = await find_existing_report(client, parent, report, period)
+                existing_id = await find_existing_report(client, parent, period)
                 if existing_id is not None:
                     return existing_id, False
-                message = await publish_report(parent, report)
+                message = await publish_report(parent, await collect_report(parent, period))
                 return message.id, True
 
             message_id, posted = asyncio.run(run_discord_action(config.token, action))

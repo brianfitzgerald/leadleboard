@@ -4,7 +4,8 @@ DLE Bot reads weekly game results from Discord threads and posts one high score 
 
 ## Scoring
 
-- The report period starts Monday at 00:00 and ends Sunday at the configured report time.
+- The report period starts at the previous Sunday report time and ends Sunday at the configured
+  report time. A result posted after the Sunday report counts for the next week.
 - Each player keeps their best result for each game.
 - Higher scores win Size It Up and RNGdle. Fewer guesses win Dartwords.
 - With `N` players in a game, ranks receive `N` through `1` points.
@@ -19,28 +20,42 @@ uv sync
 ```
 
 Copy `.env.example` to `.env`. Set the bot token, guild ID, and parent channel ID.
-`.env` is ignored by Git.
+`.env` is ignored by Git. Make the file readable only by your user:
+
+```sh
+chmod 600 .env
+```
 
 ## Add the bot to Discord
 
 1. Create an application in the [Discord Developer Portal](https://discord.com/developers/applications).
 2. Open the Bot page. Create the bot user if needed, reset its token, and put the token in `.env`.
    Never share or commit the token.
-3. Enable Message Content under Privileged Gateway Intents on the Bot page.
-4. Open OAuth2, then URL Generator. Select the `bot` scope.
-5. Select View Channels, Read Message History, Send Messages, Embed Links, and Attach Files.
+3. Enable Message Content under Privileged Gateway Intents on the Bot page. Turn off Public Bot.
+4. Open Installation. Set Install Link to None.
+5. Open OAuth2, then URL Generator. Select the `bot` scope. Do not select permissions.
 6. Open the generated URL, select the server, and authorize the bot.
-7. Confirm that the bot role has the same five permissions in the parent channel settings.
-8. Enable Developer Mode in Discord. Copy the server and parent channel IDs into `.env`.
-9. Check permissions and read one message from the parent and each public thread:
+7. Open the parent channel settings, then Permissions. Add the bot and allow View Channel,
+   Read Message History, Send Messages, Embed Links, and Attach Files. Threads use the
+   permissions of the parent channel.
+8. On each other category, add the bot and deny View Channel. Do the same for each channel that
+   is not synced to a category.
+9. Enable Developer Mode in Discord. Copy the server and parent channel IDs into `.env`.
+10. Check permissions and read one message from the parent and each public thread:
 
 ```sh
 uv run dle-bot check
 ```
 
+Discord has no application setting that limits a bot to one channel. The channel permissions
+above set the limit. `check` prints a warning for each other channel the bot can view, each other
+server the bot is in, and each bot role that grants more than the five permissions. Correct each
+warning, then run `check` again.
+
 The bot scans the parent channel and all active and archived public threads. It detects the
-game from each message. Thread names do not affect parsing. The bot does not need Administrator,
-Manage Threads, Create Threads, or Send Messages in Threads.
+game from each message. Thread names do not affect parsing. The bot sends messages only to the
+parent channel. It does not receive message events. It does not need Administrator, Manage
+Threads, Create Threads, or Send Messages in Threads.
 
 ## Preview
 
@@ -67,7 +82,8 @@ To post outside the schedule window, use:
 uv run dle-bot run --ignore-schedule
 ```
 
-This option does not bypass the weekly duplicate protection.
+This option posts the last complete week. Before the Sunday report time, that is the previous
+week. This option does not bypass the weekly duplicate protection.
 
 Open the current user's crontab:
 

@@ -7,15 +7,11 @@ from zoneinfo import ZoneInfo
 
 @dataclass(frozen=True, slots=True)
 class ReportingPeriod:
-    """A Monday-to-Sunday Discord history range."""
+    """A Discord history range for one Monday-to-Sunday week."""
 
+    week_start: date
     start: datetime
     end: datetime
-
-    @property
-    def week_start(self) -> date:
-        """Return the Monday date."""
-        return self.start.date()
 
     @property
     def week_end(self) -> date:
@@ -31,13 +27,9 @@ def period_for_week(
     """Build a complete report period from a Monday date."""
     if week_start.weekday() != 0:
         raise ValueError("The week date must be a Monday")
-    start = datetime.combine(week_start, datetime.min.time(), tzinfo=zone)
-    end = datetime.combine(
-        week_start + timedelta(days=6),
-        report_time,
-        tzinfo=zone,
-    )
-    return ReportingPeriod(start=start, end=end)
+    start = datetime.combine(week_start - timedelta(days=1), report_time, tzinfo=zone)
+    end = datetime.combine(week_start + timedelta(days=6), report_time, tzinfo=zone)
+    return ReportingPeriod(week_start=week_start, start=start, end=end)
 
 
 def current_week_start(now: datetime) -> date:

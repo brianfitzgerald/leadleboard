@@ -17,7 +17,12 @@ class PostState:
     def __enter__(self) -> Self:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._file = self.path.open("a+", encoding="utf-8")
-        fcntl.flock(self._file.fileno(), fcntl.LOCK_EX)
+        try:
+            fcntl.flock(self._file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            self._file.close()
+            self._file = None
+            raise RuntimeError("Another run holds the post state lock") from error
         return self
 
     def __exit__(

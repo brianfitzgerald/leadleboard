@@ -10,8 +10,16 @@ ZONE = ZoneInfo("America/Chicago")
 
 def test_period_for_week() -> None:
     period = period_for_week(date(2026, 9, 14), time(21), ZONE)
-    assert period.start == datetime(2026, 9, 14, 0, 0, tzinfo=ZONE)
+    assert period.start == datetime(2026, 9, 13, 21, 0, tzinfo=ZONE)
     assert period.end == datetime(2026, 9, 20, 21, 0, tzinfo=ZONE)
+    assert period.week_start == date(2026, 9, 14)
+    assert period.week_end == date(2026, 9, 20)
+
+
+def test_consecutive_periods_have_no_gap() -> None:
+    first = period_for_week(date(2026, 9, 14), time(21), ZONE)
+    second = period_for_week(date(2026, 9, 21), time(21), ZONE)
+    assert first.end == second.start
 
 
 def test_period_crosses_daylight_saving_boundary() -> None:

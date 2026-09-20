@@ -15,6 +15,20 @@ def test_empty_report_text_contains_all_sections() -> None:
     assert text.count("No qualifying scores.") == 4
 
 
+def test_discord_report_escapes_markdown_in_names() -> None:
+    report = build_report(
+        [Score(1, "**Ada**", Game.SIZE_IT_UP, 254)],
+        date(2026, 9, 14),
+        date(2026, 9, 20),
+    )
+
+    overall, size_it_up, *_ = report_sections(report, markdown=True)
+
+    assert r"**\*\*Ada\*\***" in overall[1][0]
+    assert r"**\*\*Ada\*\***" in size_it_up[1][0]
+    assert "**Ada**" in report_sections(report)[0][1][0]
+
+
 def test_discord_report_uses_markdown_and_emojis() -> None:
     report = build_report(
         [Score(1, "Ada", Game.SIZE_IT_UP, 254)],

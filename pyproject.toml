@@ -36,6 +36,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+filterwarnings = ["ignore:'count' is passed as positional argument:DeprecationWarning:discord"]
 
 [tool.ty.src]
 include = ["src", "tests"]

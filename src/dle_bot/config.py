@@ -39,23 +39,23 @@ class Config:
         except ZoneInfoNotFoundError as error:
             raise ValueError("DLE_TIMEZONE is not a valid timezone") from error
 
-        report_time_text = os.getenv("DLE_REPORT_TIME", "21:00")
         try:
-            hour_text, minute_text = report_time_text.split(":", maxsplit=1)
+            hour_text, minute_text = os.getenv("DLE_REPORT_TIME", "21:00").split(":", maxsplit=1)
             report_time = time(hour=int(hour_text), minute=int(minute_text))
-            ids = {
-                name: int(value or "")
-                for name, value in required.items()
-                if name != "DISCORD_TOKEN"
-            }
         except ValueError as error:
-            raise ValueError("IDs must be integers and DLE_REPORT_TIME must use HH:MM") from error
+            raise ValueError("DLE_REPORT_TIME must use HH:MM") from error
+
+        try:
+            guild_id = int(required["DISCORD_GUILD_ID"] or "")
+            channel_id = int(required["DISCORD_CHANNEL_ID"] or "")
+        except ValueError as error:
+            raise ValueError("DISCORD_GUILD_ID and DISCORD_CHANNEL_ID must be integers") from error
 
         state_path = Path(os.getenv("DLE_STATE_PATH", ".data/post-state")).expanduser()
         return cls(
             token=required["DISCORD_TOKEN"] or "",
-            guild_id=ids["DISCORD_GUILD_ID"],
-            channel_id=ids["DISCORD_CHANNEL_ID"],
+            guild_id=guild_id,
+            channel_id=channel_id,
             timezone=timezone,
             report_time=report_time,
             state_path=state_path,

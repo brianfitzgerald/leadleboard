@@ -10,10 +10,24 @@ import pytest
 
 import dle_bot.discord_app as discord_app
 from dle_bot.config import Config
-from dle_bot.discord_app import check_access, collect_report, find_existing_report
-from dle_bot.models import Game, WeeklyReport
+from dle_bot.discord_app import (
+    check_access,
+    collect_report,
+    discover_public_threads,
+    find_existing_report,
+    publish_report,
+    run_discord_action,
+)
+from dle_bot.models import Game, Score
 from dle_bot.report import report_marker
 from dle_bot.schedule import ReportingPeriod
+from dle_bot.scoring import build_report
+
+PERIOD = ReportingPeriod(
+    week_start=date(2026, 9, 14),
+    start=datetime(2026, 9, 13, 21, tzinfo=UTC),
+    end=datetime(2026, 9, 20, 21, tzinfo=UTC),
+)
 
 
 class FakeThread:
@@ -27,7 +41,9 @@ class FakeThread:
         *,
         archived: bool = False,
         has_message: bool = True,
+        archive_timestamp: datetime | None = None,
     ) -> None:
+        self.archive_timestamp = archive_timestamp
         self.id = thread_id
         self.name = name
         self.type = thread_type
@@ -78,11 +94,28 @@ class FakeParent:
 class FakeGuild:
     """Provide active threads for access checks."""
 
+    id = 1
     name = "Friends"
-    me = object()
 
-    def __init__(self, active: list[FakeThread]) -> None:
+    def __init__(
+        self,
+        active: list[FakeThread],
+        *,
+        channels: list[object] | None = None,
+        role_permissions: discord.Permissions | None = None,
+    ) -> None:
         self.active = active
+        self.channels = channels or []
+        self.me = SimpleNamespace(
+            roles=[
+                SimpleNamespace(name="@everyone", is_default=lambda: True),
+                SimpleNamespace(
+                    name="dle-bot",
+                    is_default=lambda: False,
+                    permissions=role_permissions or discord.Permissions.none(),
+                ),
+            ]
+        )
 
     async def active_threads(self) -> list[FakeThread]:
         return self.active
@@ -105,6 +138,7 @@ async def run_access_check(
     parent: FakeParent,
     guild: FakeGuild,
     settings: Config,
+    other_guilds: list[SimpleNamespace] | None = None,
 ) -> list[str]:
     """Run the access check with Discord test objects."""
 
@@ -112,7 +146,10 @@ async def run_access_check(
         return cast(discord.TextChannel, parent)
 
     monkeypatch.setattr(discord_app, "fetch_parent", fetch_parent)
-    client = cast(discord.Client, SimpleNamespace(get_guild=lambda guild_id: guild))
+    client = cast(
+        discord.Client,
+        SimpleNamespace(get_guild=lambda guild_id: guild, guilds=[guild, *(other_guilds or [])]),
+    )
     return await check_access(client, settings)
 
 
@@ -125,23 +162,13 @@ async def test_find_existing_report(author_id: int, expected: int | None) -> Non
             yield SimpleNamespace(
                 id=123,
                 author=SimpleNamespace(id=author_id),
-                content=report_marker(report),
+                content=report_marker(date(2026, 9, 14), date(2026, 9, 20)),
             )
 
-    report = WeeklyReport(
-        week_start=date(2026, 9, 14),
-        week_end=date(2026, 9, 20),
-        games={},
-        overall=[],
-    )
-    period = ReportingPeriod(
-        start=datetime(2026, 9, 14, tzinfo=UTC),
-        end=datetime(2026, 9, 21, tzinfo=UTC),
-    )
     client = cast(discord.Client, SimpleNamespace(user=SimpleNamespace(id=42)))
     channel = cast(discord.TextChannel, HistoryChannel())
 
-    assert await find_existing_report(client, channel, report, period) == expected
+    assert await find_existing_report(client, channel, PERIOD) == expected
 
 
 async def test_check_access_reads_all_public_threads(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -230,25 +257,128 @@ async def test_collect_report_parses_each_game_from_any_channel(
     parent = HistoryChannel([combined, ignored])
     thread = HistoryChannel([dartwords])
 
-    async def fetch_parent(client: discord.Client, current: Config) -> discord.TextChannel:
-        return cast(discord.TextChannel, parent)
-
     async def discover_threads(
         current: discord.TextChannel,
         guild: discord.Guild,
+        after: datetime | None = None,
     ) -> list[discord.Thread]:
         return [cast(discord.Thread, thread)]
 
-    monkeypatch.setattr(discord_app, "fetch_parent", fetch_parent)
     monkeypatch.setattr(discord_app, "discover_public_threads", discover_threads)
-    period = ReportingPeriod(
-        start=datetime(2026, 9, 14, tzinfo=UTC),
-        end=datetime(2026, 9, 21, tzinfo=UTC),
-    )
 
-    report = await collect_report(cast(discord.Client, object()), config(), period)
+    report = await collect_report(cast(discord.TextChannel, parent), PERIOD)
 
     assert report.games[Game.SIZE_IT_UP][0].score.value == 254
     assert report.games[Game.RNGDLE][0].score.value == 203506
     assert report.games[Game.DARTWORDS][0].score.value == 5
     assert report.overall[0].display_name == "Ada"
+
+
+@pytest.mark.parametrize(
+    ("channels", "other_guilds", "role_permissions", "expected"),
+    [
+        ([], [], discord.Permissions.none(), []),
+        ([SimpleNamespace(id=20, name="general", visible=False)], [], None, []),
+        (
+            [SimpleNamespace(id=20, name="general", visible=True)],
+            [],
+            None,
+            ["Warning: the bot can view #general"],
+        ),
+        (
+            [],
+            [SimpleNamespace(id=2, name="Other")],
+            None,
+            ["Warning: the bot is also in the guild Other"],
+        ),
+        (
+            [],
+            [],
+            discord.Permissions(view_channel=True, send_messages=True, administrator=True),
+            ["Warning: the role dle-bot also grants administrator"],
+        ),
+    ],
+)
+async def test_check_access_warns_about_wider_access(
+    monkeypatch: pytest.MonkeyPatch,
+    channels: list[SimpleNamespace],
+    other_guilds: list[SimpleNamespace],
+    role_permissions: discord.Permissions | None,
+    expected: list[str],
+) -> None:
+    parent = FakeParent([])
+    for channel in channels:
+        channel.permissions_for = lambda member, visible=channel.visible: SimpleNamespace(
+            view_channel=visible
+        )
+    guild = FakeGuild([], channels=[parent, *channels], role_permissions=role_permissions)
+
+    details = await run_access_check(monkeypatch, parent, guild, config(), other_guilds)
+
+    assert [detail for detail in details if detail.startswith("Warning")] == expected
+
+
+async def test_discover_public_threads_stops_at_old_archived_threads() -> None:
+    public = discord.ChannelType.public_thread
+    archived = [
+        FakeThread(11, "New", public, archived=True, archive_timestamp=PERIOD.end),
+        FakeThread(
+            12, "Old", public, archived=True, archive_timestamp=datetime(2026, 9, 1, tzinfo=UTC)
+        ),
+    ]
+
+    threads = await discover_public_threads(
+        cast(discord.TextChannel, FakeParent(archived)),
+        cast(discord.Guild, FakeGuild([])),
+        after=PERIOD.start,
+    )
+
+    assert [thread.name for thread in threads] == ["New"]
+
+
+@pytest.mark.parametrize(
+    ("scores", "expect_embed"),
+    [
+        ([Score(1, "Ada", Game.RNGDLE, 203506)], True),
+        ([Score(index, f"Player {index}", Game.RNGDLE, index) for index in range(40)], True),
+        ([Score(index, f"Player {index}", Game.RNGDLE, index) for index in range(200)], False),
+        ([Score(1, "Ada", Game.RNGDLE, 10**1500)], False),
+    ],
+)
+async def test_publish_report_sends_valid_fields_or_a_file(
+    scores: list[Score],
+    expect_embed: bool,
+) -> None:
+    class SendChannel:
+        """Record the arguments of one sent message."""
+
+        async def send(self, **kwargs: object) -> None:
+            self.sent = kwargs
+
+    channel = SendChannel()
+    report = build_report(scores, PERIOD.week_start, PERIOD.week_end)
+
+    await publish_report(cast(discord.TextChannel, channel), report)
+
+    mentions = cast(discord.AllowedMentions, channel.sent["allowed_mentions"])
+    assert mentions.to_dict() == discord.AllowedMentions.none().to_dict()
+    assert ("embed" in channel.sent) == expect_embed
+    assert ("file" in channel.sent) != expect_embed
+    if expect_embed:
+        embed = cast(discord.Embed, channel.sent["embed"])
+        assert all(0 < len(field.value or "") <= 1024 for field in embed.fields)
+
+
+async def test_run_discord_action_requires_a_started_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def start(self: discord.Client, token: str) -> None:
+        return None
+
+    async def action(client: discord.Client) -> int:
+        return 1
+
+    monkeypatch.setattr(discord_app.ActionClient, "start", start)
+
+    with pytest.raises(RuntimeError, match="before the action started"):
+        await run_discord_action("token", action)
