@@ -6,8 +6,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-import dle_bot.cli as cli
-from dle_bot.config import Config
+import leadleboard.cli as cli
+from leadleboard.config import Config
 
 
 class PostedState:
@@ -27,7 +27,7 @@ class PostedState:
 
 
 @pytest.fixture
-def configured_cli(monkeypatch: pytest.MonkeyPatch) -> cli.DleBotCli:
+def configured_cli(monkeypatch: pytest.MonkeyPatch) -> cli.LeadleboardCli:
     """Provide a CLI with local configuration and state."""
     config = Config(
         token="token",
@@ -40,16 +40,16 @@ def configured_cli(monkeypatch: pytest.MonkeyPatch) -> cli.DleBotCli:
     monkeypatch.setattr(cli.Config, "load", lambda: config)
     monkeypatch.setattr(cli, "PostState", PostedState)
     monkeypatch.setattr(cli, "is_post_window", lambda now, end: False)
-    return cli.DleBotCli()
+    return cli.LeadleboardCli()
 
 
-def test_run_rejects_time_outside_schedule(configured_cli: cli.DleBotCli) -> None:
+def test_run_rejects_time_outside_schedule(configured_cli: cli.LeadleboardCli) -> None:
     with pytest.raises(RuntimeError, match="Posting is allowed only"):
         configured_cli.run()
 
 
 def test_run_can_ignore_schedule(
-    configured_cli: cli.DleBotCli,
+    configured_cli: cli.LeadleboardCli,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     configured_cli.run(ignore_schedule=True)
@@ -71,7 +71,7 @@ def set_now(monkeypatch: pytest.MonkeyPatch, now: datetime) -> None:
     ],
 )
 def test_run_ignore_schedule_selects_the_last_complete_week(
-    configured_cli: cli.DleBotCli,
+    configured_cli: cli.LeadleboardCli,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     now: datetime,
@@ -86,7 +86,7 @@ def test_run_ignore_schedule_selects_the_last_complete_week(
 
 @pytest.mark.parametrize("week", ["2026-09-07", 20260907])
 def test_preview_accepts_text_and_integer_weeks(
-    configured_cli: cli.DleBotCli,
+    configured_cli: cli.LeadleboardCli,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     week: str | int,

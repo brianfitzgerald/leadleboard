@@ -1,8 +1,8 @@
 from datetime import date
 
-from dle_bot.models import Game, Score
-from dle_bot.report import render_text, report_sections
-from dle_bot.scoring import build_report
+from leadleboard.models import Game, Score
+from leadleboard.report import render_text, report_sections
+from leadleboard.scoring import build_report
 
 
 def test_empty_report_text_contains_all_sections() -> None:

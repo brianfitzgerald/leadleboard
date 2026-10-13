@@ -1,7 +1,7 @@
 from datetime import date
 
-from dle_bot.models import Game, Score
-from dle_bot.scoring import build_report
+from leadleboard.models import Game, Score
+from leadleboard.scoring import build_report
 
 
 def test_build_report_selects_best_scores_and_awards_rank_points() -> None:

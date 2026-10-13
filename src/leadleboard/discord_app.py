@@ -9,12 +9,12 @@ from typing import cast
 import discord
 import httpx
 
-from dle_bot.config import Config
-from dle_bot.models import Game, Score, WeeklyReport
-from dle_bot.parsers import parse_dartwords, parse_rngdle, parse_size_it_up
-from dle_bot.report import render_text, report_marker, report_sections
-from dle_bot.schedule import ReportingPeriod
-from dle_bot.scoring import build_report
+from leadleboard.config import Config
+from leadleboard.models import Game, Score, WeeklyReport
+from leadleboard.parsers import parse_dartwords, parse_rngdle, parse_size_it_up
+from leadleboard.report import render_text, report_marker, report_sections
+from leadleboard.schedule import ReportingPeriod
+from leadleboard.scoring import build_report
 
 REQUIRED_PERMISSIONS = {
     "view_channel": "View Channels",

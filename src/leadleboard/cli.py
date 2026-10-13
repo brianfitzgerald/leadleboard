@@ -7,8 +7,8 @@ from datetime import date, datetime, timedelta
 import discord
 import fire
 
-from dle_bot.config import Config
-from dle_bot.discord_app import (
+from leadleboard.config import Config
+from leadleboard.discord_app import (
     check_access,
     collect_report,
     fetch_parent,
@@ -16,12 +16,17 @@ from dle_bot.discord_app import (
     publish_report,
     run_discord_action,
 )
-from dle_bot.report import render_text
-from dle_bot.schedule import ReportingPeriod, current_week_start, is_post_window, period_for_week
-from dle_bot.state import PostState
+from leadleboard.report import render_text
+from leadleboard.schedule import (
+    ReportingPeriod,
+    current_week_start,
+    is_post_window,
+    period_for_week,
+)
+from leadleboard.state import PostState
 
 
-class DleBotCli:
+class LeadleboardCli:
     """Collect and report weekly Discord high scores."""
 
     def check(self) -> None:
@@ -98,4 +103,4 @@ class DleBotCli:
 def main() -> None:
     """Run the Fire CLI."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    fire.Fire(DleBotCli)
+    fire.Fire(LeadleboardCli)

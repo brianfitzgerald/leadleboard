@@ -1,5 +1,5 @@
 [project]
-name = "dle-bot"
+name = "leadleboard"
 version = "0.1.0"
 description = "Weekly Discord high score collector"
 readme = "README.md"
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dle-bot = "dle_bot.cli:main"
+leadleboard = "leadleboard.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.28,<0.13.0"]

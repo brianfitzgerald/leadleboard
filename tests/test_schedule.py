@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from dle_bot.schedule import current_week_start, is_post_window, period_for_week
+from leadleboard.schedule import current_week_start, is_post_window, period_for_week
 
 ZONE = ZoneInfo("America/Chicago")
 

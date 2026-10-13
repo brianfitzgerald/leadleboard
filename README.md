@@ -1,6 +1,6 @@
-# DLE Bot
+# Leadleboard
 
-DLE Bot reads weekly game results from Discord threads and posts one high score report.
+Leadleboard reads weekly game results from Discord threads and posts one high score report.
 
 ## Scoring
 
@@ -44,7 +44,7 @@ chmod 600 .env
 10. Check permissions and read one message from the parent and each public thread:
 
 ```sh
-uv run dle-bot check
+uv run leadleboard check
 ```
 
 Discord has no application setting that limits a bot to one channel. The channel permissions
@@ -62,13 +62,13 @@ Threads, Create Threads, or Send Messages in Threads.
 Preview the current week without posting or changing post state:
 
 ```sh
-uv run dle-bot preview
+uv run leadleboard preview
 ```
 
 Preview a past week by its Monday date:
 
 ```sh
-uv run dle-bot preview --week 2026-09-14
+uv run leadleboard preview --week 2026-09-14
 ```
 
 ## Schedule on macOS
@@ -79,7 +79,7 @@ uses a locked state file and the Discord report marker to prevent a second weekl
 To post outside the schedule window, use:
 
 ```sh
-uv run dle-bot run --ignore-schedule
+uv run leadleboard run --ignore-schedule
 ```
 
 This option posts the last complete week. Before the Sunday report time, that is the previous
@@ -94,11 +94,11 @@ crontab -e
 Add this entry:
 
 ```cron
-0 21 * * 0 cd /Users/brian/repos/dle-bot && /opt/homebrew/bin/uv run dle-bot run >> /Users/brian/Library/Logs/dle-bot.log 2>&1
+0 21 * * 0 cd /Users/brian/repos/leadleboard && /opt/homebrew/bin/uv run leadleboard run >> /Users/brian/Library/Logs/leadleboard.log 2>&1
 ```
 
-The cron time must match `DLE_REPORT_TIME`. The Mac timezone must match `DLE_TIMEZONE`, which
-defaults to `America/Chicago`. The Mac must be awake at the scheduled time because cron does
+The cron time must match `LEADLEBOARD_REPORT_TIME`. The Mac timezone must match
+`LEADLEBOARD_TIMEZONE`, which defaults to `America/Chicago`. The Mac must be awake at the scheduled time because cron does
 not run missed jobs after sleep.
 
 ## Development

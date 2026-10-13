@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from dle_bot.parsers import (
+from leadleboard.parsers import (
     parse_dartwords,
     parse_dartwords_description,
     parse_rngdle,

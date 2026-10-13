@@ -3,7 +3,7 @@
 from collections import defaultdict
 from datetime import date
 
-from dle_bot.models import Game, GameStanding, OverallStanding, Score, WeeklyReport
+from leadleboard.models import Game, GameStanding, OverallStanding, Score, WeeklyReport
 
 
 def build_report(scores: list[Score], week_start: date, week_end: date) -> WeeklyReport:

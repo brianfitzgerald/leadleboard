@@ -35,15 +35,17 @@ class Config:
             raise ValueError(f"Missing environment variables: {', '.join(missing)}")
 
         try:
-            timezone = ZoneInfo(os.getenv("DLE_TIMEZONE", "America/Chicago"))
+            timezone = ZoneInfo(os.getenv("LEADLEBOARD_TIMEZONE", "America/Chicago"))
         except ZoneInfoNotFoundError as error:
-            raise ValueError("DLE_TIMEZONE is not a valid timezone") from error
+            raise ValueError("LEADLEBOARD_TIMEZONE is not a valid timezone") from error
 
         try:
-            hour_text, minute_text = os.getenv("DLE_REPORT_TIME", "21:00").split(":", maxsplit=1)
+            hour_text, minute_text = os.getenv("LEADLEBOARD_REPORT_TIME", "21:00").split(
+                ":", maxsplit=1
+            )
             report_time = time(hour=int(hour_text), minute=int(minute_text))
         except ValueError as error:
-            raise ValueError("DLE_REPORT_TIME must use HH:MM") from error
+            raise ValueError("LEADLEBOARD_REPORT_TIME must use HH:MM") from error
 
         try:
             guild_id = int(required["DISCORD_GUILD_ID"] or "")
@@ -51,7 +53,7 @@ class Config:
         except ValueError as error:
             raise ValueError("DISCORD_GUILD_ID and DISCORD_CHANNEL_ID must be integers") from error
 
-        state_path = Path(os.getenv("DLE_STATE_PATH", ".data/post-state")).expanduser()
+        state_path = Path(os.getenv("LEADLEBOARD_STATE_PATH", ".data/post-state")).expanduser()
         return cls(
             token=required["DISCORD_TOKEN"] or "",
             guild_id=guild_id,

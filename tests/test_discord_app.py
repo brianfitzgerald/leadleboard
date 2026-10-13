@@ -8,9 +8,9 @@ from zoneinfo import ZoneInfo
 import discord
 import pytest
 
-import dle_bot.discord_app as discord_app
-from dle_bot.config import Config
-from dle_bot.discord_app import (
+import leadleboard.discord_app as discord_app
+from leadleboard.config import Config
+from leadleboard.discord_app import (
     check_access,
     collect_report,
     discover_public_threads,
@@ -18,10 +18,10 @@ from dle_bot.discord_app import (
     publish_report,
     run_discord_action,
 )
-from dle_bot.models import Game, Score
-from dle_bot.report import report_marker
-from dle_bot.schedule import ReportingPeriod
-from dle_bot.scoring import build_report
+from leadleboard.models import Game, Score
+from leadleboard.report import report_marker
+from leadleboard.schedule import ReportingPeriod
+from leadleboard.scoring import build_report
 
 PERIOD = ReportingPeriod(
     week_start=date(2026, 9, 14),
@@ -110,7 +110,7 @@ class FakeGuild:
             roles=[
                 SimpleNamespace(name="@everyone", is_default=lambda: True),
                 SimpleNamespace(
-                    name="dle-bot",
+                    name="leadleboard",
                     is_default=lambda: False,
                     permissions=role_permissions or discord.Permissions.none(),
                 ),
@@ -295,7 +295,7 @@ async def test_collect_report_parses_each_game_from_any_channel(
             [],
             [],
             discord.Permissions(view_channel=True, send_messages=True, administrator=True),
-            ["Warning: the role dle-bot also grants administrator"],
+            ["Warning: the role leadleboard also grants administrator"],
         ),
     ],
 )

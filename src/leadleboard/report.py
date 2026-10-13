@@ -4,7 +4,7 @@ from datetime import date
 
 from discord.utils import escape_markdown
 
-from dle_bot.models import Game, WeeklyReport
+from leadleboard.models import Game, WeeklyReport
 
 GAME_EMOJIS = {
     Game.SIZE_IT_UP: "📏",

@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from dle_bot.state import PostState
+from leadleboard.state import PostState
 
 
 def test_post_state_records_each_week_once(tmp_path) -> None:
