@@ -1,22 +1,9 @@
 """Calculate preview and scheduled report periods."""
 
-from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-
-@dataclass(frozen=True, slots=True)
-class ReportingPeriod:
-    """A Discord history range for one Monday-to-Sunday week."""
-
-    week_start: date
-    start: datetime
-    end: datetime
-
-    @property
-    def week_end(self) -> date:
-        """Return the Sunday date."""
-        return self.end.date()
+from leadleboard.models import ReportingPeriod
 
 
 def period_for_week(

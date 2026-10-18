@@ -2,7 +2,8 @@
 
 import asyncio
 import logging
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import discord
 import fire
@@ -16,7 +17,8 @@ from leadleboard.discord_app import (
     publish_report,
     run_discord_action,
 )
-from leadleboard.report import render_text
+from leadleboard.models import PostResult, PreviewSnapshot, WeeklyReport
+from leadleboard.report import build_message_payload, render_markdown, save_preview
 from leadleboard.schedule import (
     ReportingPeriod,
     current_week_start,
@@ -36,11 +38,11 @@ class LeadleboardCli:
         async def action(client: discord.Client) -> list[str]:
             return await check_access(client, config)
 
-        for line in asyncio.run(run_discord_action(config.token, action)):
+        for line in asyncio.run(run_discord_action(config.token.get_secret_value(), action)):
             print(line)
         print("Configuration, permissions, and public thread access are valid.")
 
-    def preview(self, week: str | int | None = None) -> None:
+    def preview(self, week: str | int | None = None, output_dir: str | None = None) -> None:
         """Print a weekly report without posting or changing post state."""
         config = Config.load()
         now = datetime.now(config.timezone)
@@ -55,11 +57,22 @@ class LeadleboardCli:
         if period.end > now:
             period = ReportingPeriod(week_start=week_start, start=period.start, end=now)
 
-        async def action(client: discord.Client) -> str:
+        async def action(client: discord.Client) -> WeeklyReport:
             parent = await fetch_parent(client, config)
-            return render_text(await collect_report(parent, period))
+            return await collect_report(parent, period)
 
-        print(asyncio.run(run_discord_action(config.token, action)))
+        report = asyncio.run(run_discord_action(config.token.get_secret_value(), action))
+        snapshot = PreviewSnapshot(
+            collected_at=datetime.now(UTC),
+            guild_id=config.guild_id,
+            channel_id=config.channel_id,
+            period=period,
+            report=report,
+            payload=build_message_payload(report),
+        )
+        if output_dir is not None:
+            save_preview(snapshot, Path(output_dir), f"high-scores-{week_start.isoformat()}")
+        print(render_markdown(snapshot.payload))
 
     def run(self, ignore_schedule: bool = False) -> None:
         """Post the weekly report once, with an optional schedule bypass."""
@@ -82,22 +95,28 @@ class LeadleboardCli:
             )
 
         with PostState(config.state_path) as state:
-            if state.was_posted(period.week_start):
+            if state.was_posted(period.week_start, config.guild_id, config.channel_id):
                 print(f"The {period.week_start.isoformat()} report was already posted.")
                 return
 
-            async def action(client: discord.Client) -> tuple[int, bool]:
+            async def action(client: discord.Client) -> PostResult:
                 parent = await fetch_parent(client, config)
                 existing_id = await find_existing_report(client, parent, period)
                 if existing_id is not None:
-                    return existing_id, False
+                    return PostResult(message_id=existing_id, posted=False)
                 message = await publish_report(parent, await collect_report(parent, period))
-                return message.id, True
+                return PostResult(message_id=message.id, posted=True)
 
-            message_id, posted = asyncio.run(run_discord_action(config.token, action))
-            state.record(period.week_start)
-            verb = "Posted" if posted else "Found"
-            print(f"{verb} report message {message_id} for {period.week_start.isoformat()}.")
+            result = asyncio.run(run_discord_action(config.token.get_secret_value(), action))
+            state.record(
+                period.week_start,
+                config.guild_id,
+                config.channel_id,
+                result.message_id,
+                result.posted,
+            )
+            verb = "Posted" if result.posted else "Found"
+            print(f"{verb} report message {result.message_id} for {period.week_start.isoformat()}.")
 
 
 def main() -> None:

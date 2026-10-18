@@ -1,24 +1,32 @@
 """Load and validate bot configuration."""
 
 import os
-from dataclasses import dataclass
 from datetime import time
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
+from pydantic import ConfigDict, Field, SecretStr, field_serializer
+
+from leadleboard.models import DataModel
 
 
-@dataclass(frozen=True, slots=True)
-class Config:
+class Config(DataModel):
     """Runtime settings loaded from environment variables."""
 
-    token: str
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    token: SecretStr = Field(exclude=True, repr=False)
     guild_id: int
     channel_id: int
     timezone: ZoneInfo
     report_time: time
     state_path: Path
+
+    @field_serializer("timezone")
+    def serialize_timezone(self, zone: ZoneInfo) -> str:
+        """Serialize the timezone name."""
+        return zone.key
 
     @classmethod
     def load(cls) -> Config:
@@ -53,9 +61,9 @@ class Config:
         except ValueError as error:
             raise ValueError("DISCORD_GUILD_ID and DISCORD_CHANNEL_ID must be integers") from error
 
-        state_path = Path(os.getenv("LEADLEBOARD_STATE_PATH", ".data/post-state")).expanduser()
+        state_path = Path(os.getenv("LEADLEBOARD_STATE_PATH", ".data/post-state.json")).expanduser()
         return cls(
-            token=required["DISCORD_TOKEN"] or "",
+            token=SecretStr(required["DISCORD_TOKEN"] or ""),
             guild_id=guild_id,
             channel_id=channel_id,
             timezone=timezone,

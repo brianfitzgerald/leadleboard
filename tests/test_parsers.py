@@ -6,6 +6,7 @@ from leadleboard.parsers import (
     parse_dartwords_description,
     parse_rngdle,
     parse_size_it_up,
+    parse_wikirng,
 )
 
 
@@ -42,6 +43,32 @@ def test_parse_size_it_up(content: str, expected: int | None) -> None:
 )
 def test_parse_rngdle(content: str, expected: int | None) -> None:
     assert parse_rngdle(content) == expected
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (
+            "WikiRNG 🎲 Juybadam\n\n⬜ BASIC • Bottom 40%\n\n"
+            "🟦 🏘️ Tiny Town\n🟩 🎖️ .mil\n🟩 🛖 Village\n+18 more\n\n"
+            "33,647 SP\nhttps://wikirng.com/",
+            33647,
+        ),
+        ("WikiRNG\n33647 SP\nhttps://wikirng.com/", 33647),
+        ("wikirng\n0 sp\nhttps://wikirng.com/", 0),
+        ("WikiRNG\n1,234,567 SP\nhttps://wikirng.com/", 1234567),
+        ("33,647 SP", None),
+        ("WikiRNG\n33,647 SP", None),
+        ("WikiRNG\nBottom 40%\nhttps://wikirng.com/", None),
+        ("WikiRNG\n33,647 EP\nhttps://wikirng.com/", None),
+        ("WikiRNG\n-33,647 SP\nhttps://wikirng.com/", None),
+        ("WikiRNG\n33,64 SP\nhttps://wikirng.com/", None),
+        ("WikiRNG\n33.5 SP\nhttps://wikirng.com/", None),
+        (f"WikiRNG\n{'9' * 1500} SP\nhttps://wikirng.com/", None),
+    ],
+)
+def test_parse_wikirng(content: str, expected: int | None) -> None:
+    assert parse_wikirng(content) == expected
 
 
 @pytest.mark.parametrize(

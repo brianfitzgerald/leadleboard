@@ -1,28 +1,53 @@
-"""Protect weekly posts with a locked state file."""
+"""Protect JSON post history with a separate lock file."""
 
 import fcntl
-from datetime import date
+import os
+from datetime import UTC, date, datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from types import TracebackType
-from typing import IO, Self
+from typing import Self, TextIO
+
+from leadleboard.models import PostHistory, PostRecord
 
 
 class PostState:
-    """Store posted weeks and serialize local post attempts."""
+    """Store report history and serialize local post attempts."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._file: IO[str] | None = None
+        self.history = PostHistory()
+        self._lock: TextIO | None = None
 
     def __enter__(self) -> Self:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = self.path.open("a+", encoding="utf-8")
+        self._lock = self.path.with_name(f"{self.path.name}.lock").open("a", encoding="utf-8")
         try:
-            fcntl.flock(self._file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(self._lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            self._file.close()
-            self._file = None
+            self._lock.close()
+            self._lock = None
             raise RuntimeError("Another run holds the post state lock") from error
+        try:
+            source = self.path
+            if not source.exists() and self.path.name == "post-state.json":
+                source = self.path.with_name("post-state")
+            if source.exists():
+                text = source.read_text(encoding="utf-8").strip()
+                if text and not text.startswith("{"):
+                    week = date.fromisoformat(text)
+                    self.write(
+                        PostHistory(records=[PostRecord(week_start=week, outcome="imported")])
+                    )
+                elif text:
+                    self.history = PostHistory.model_validate_json(text)
+                    if source != self.path:
+                        self.write(self.history)
+                else:
+                    raise ValueError("Post state is empty")
+        except Exception:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def __exit__(
@@ -31,23 +56,58 @@ class PostState:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        if self._file is not None:
-            self._file.flush()
-            fcntl.flock(self._file.fileno(), fcntl.LOCK_UN)
-            self._file.close()
-            self._file = None
+        if self._lock is not None:
+            fcntl.flock(self._lock.fileno(), fcntl.LOCK_UN)
+            self._lock.close()
+            self._lock = None
 
-    def was_posted(self, week_start: date) -> bool:
-        """Return whether the week has a successful post."""
-        if self._file is None:
+    def was_posted(self, week_start: date, guild_id: int, channel_id: int) -> bool:
+        """Check scoped records and imported date-only records."""
+        if self._lock is None:
             raise RuntimeError("Post state is not locked")
-        self._file.seek(0)
-        return self._file.read().strip() == week_start.isoformat()
+        return any(
+            record.week_start == week_start
+            and (
+                (record.guild_id == guild_id and record.channel_id == channel_id)
+                or record.outcome == "imported"
+            )
+            for record in self.history.records
+        )
 
-    def record(self, week_start: date) -> None:
-        """Record one successful weekly post."""
-        if self._file is None:
+    def record(
+        self,
+        week_start: date,
+        guild_id: int,
+        channel_id: int,
+        message_id: int,
+        posted: bool,
+    ) -> None:
+        """Record a successful post or a report found in Discord."""
+        if self.was_posted(week_start, guild_id, channel_id):
+            return
+        record = PostRecord(
+            week_start=week_start,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            recorded_at=datetime.now(UTC),
+            outcome="posted" if posted else "found",
+        )
+        self.write(PostHistory(records=[*self.history.records, record]))
+
+    def write(self, history: PostHistory) -> None:
+        """Replace the JSON file while retaining the state lock."""
+        if self._lock is None:
             raise RuntimeError("Post state is not locked")
-        self._file.seek(0)
-        self._file.truncate()
-        self._file.write(week_start.isoformat())
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=self.path.parent, delete=False
+        ) as file:
+            temporary_path = Path(file.name)
+            try:
+                file.write(history.model_dump_json(indent=2) + "\n")
+                file.flush()
+                os.fsync(file.fileno())
+                os.replace(temporary_path, self.path)
+            finally:
+                temporary_path.unlink(missing_ok=True)
+        self.history = history

@@ -54,3 +54,25 @@ def test_build_empty_report() -> None:
     report = build_report([], date(2026, 9, 14), date(2026, 9, 20))
     assert report.overall == []
     assert all(report.games[game] == [] for game in Game)
+
+
+def test_wikirng_keeps_highest_score_and_awards_tied_points() -> None:
+    scores = [
+        Score(user_id=1, display_name="Ada", game=Game.WIKIRNG, value=100),
+        Score(user_id=1, display_name="Ada", game=Game.WIKIRNG, value=33647),
+        Score(user_id=2, display_name="Bob", game=Game.WIKIRNG, value=33647),
+        Score(user_id=3, display_name="Cam", game=Game.WIKIRNG, value=200),
+    ]
+
+    report = build_report(scores, date(2026, 9, 14), date(2026, 9, 20))
+
+    assert [(item.score.value, item.rank, item.points) for item in report.games[Game.WIKIRNG]] == [
+        (33647, 1, 3),
+        (33647, 1, 3),
+        (200, 3, 1),
+    ]
+    assert [(item.display_name, item.points) for item in report.overall] == [
+        ("Ada", 3),
+        ("Bob", 3),
+        ("Cam", 1),
+    ]

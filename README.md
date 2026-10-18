@@ -7,7 +7,8 @@ Leadleboard reads weekly game results from Discord threads and posts one high sc
 - The report period starts at the previous Sunday report time and ends Sunday at the configured
   report time. A result posted after the Sunday report counts for the next week.
 - Each player keeps their best result for each game.
-- Higher scores win Size It Up and RNGdle. Fewer guesses win Dartwords.
+- Higher scores win Size It Up, RNGdle, and WikiRNG. Fewer guesses win Dartwords.
+- WikiRNG uses the SP value in the shared result.
 - With `N` players in a game, ranks receive `N` through `1` points.
 - Tied players receive the same competition-rank points. A missing game receives zero points.
 
@@ -71,10 +72,22 @@ Preview a past week by its Monday date:
 uv run leadleboard preview --week 2026-09-14
 ```
 
+Print the exact Discord message text and save Markdown plus JSON:
+
+```sh
+uv run leadleboard preview --output-dir .data/previews
+```
+
+The Markdown keeps the message content, embed field names, and values unchanged. It inserts
+blank lines between fields. Discord embed layout and color are stored in JSON. If Discord needs
+a text attachment, the preview saves its exact bytes as `.txt` and `.md` files.
+JSON also stores scores, ranks, query times, server and channel IDs, and collection time.
+Repeated previews replace files for the same week in the selected directory.
+
 ## Schedule on macOS
 
 `run` posts only during the first ten minutes after the configured Sunday report time. It
-uses a locked state file and the Discord report marker to prevent a second weekly post.
+uses locked JSON post history and the Discord report marker to prevent a second weekly post.
 
 To post outside the schedule window, use:
 
@@ -101,6 +114,39 @@ The cron time must match `LEADLEBOARD_REPORT_TIME`. The Mac timezone must match
 `LEADLEBOARD_TIMEZONE`, which defaults to `America/Chicago`. The Mac must be awake at the scheduled time because cron does
 not run missed jobs after sleep.
 
+## Post history
+
+The default state file is `.data/post-state.json`. Each record stores the week, server ID,
+channel ID, message ID, record time, and whether the report was posted or found in Discord.
+A separate `.lock` file protects each run. State writes replace the JSON file atomically.
+
+The first run imports an existing `.data/post-state` date without changing the old file.
+A configured date-only state file is converted in place. Imported dates keep their duplicate
+protection; unknown metadata stays empty. Invalid state stops the run without changing the file.
+Preview and smoke tests do not change post history.
+
+## Smoke tests
+
+Run the read-only Discord tests with pytest:
+
+```sh
+uv run pytest --run-smoke -m smoke
+```
+
+Each run creates `.data/smoke-tests/<UTC timestamp>-<unique ID>/`. It saves `results.md`,
+`results.json`, and exact Markdown plus JSON previews for the current week, previous week,
+and last 90 days. Results include access warnings, errors, timing, and captured test output.
+Results are written before collection and after each test phase, including failures and
+pytest interruptions. A forced process termination can leave the run marked incomplete.
+
+The tests read the configured server and channel from `.env`. They require the known test
+scores for all three games in the last 90 days. They do not send Discord messages or change
+permissions. Missing configuration fails an explicit smoke run. Normal pytest runs skip
+live tests.
+
+Use `--smoke-output-dir <path>` to select a different parent directory. Each invocation still
+creates a separate run directory. All files under `.data/` are ignored by Git.
+
 ## Development
 
 ```sh
@@ -110,3 +156,5 @@ uv run ruff format --check
 uv run ty check
 uv run pre-commit run --all-files
 ```
+
+`ty` checks all project Python files. Ruff requires parameter and return annotations.

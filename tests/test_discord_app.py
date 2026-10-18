@@ -1,12 +1,13 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, time
 from pathlib import Path
-from types import SimpleNamespace
 from typing import cast
+from unittest.mock import Mock
 from zoneinfo import ZoneInfo
 
 import discord
 import pytest
+from pydantic import ConfigDict, Field, SecretStr
 
 import leadleboard.discord_app as discord_app
 from leadleboard.config import Config
@@ -18,7 +19,7 @@ from leadleboard.discord_app import (
     publish_report,
     run_discord_action,
 )
-from leadleboard.models import Game, Score
+from leadleboard.models import DataModel, Game, Score
 from leadleboard.report import report_marker
 from leadleboard.schedule import ReportingPeriod
 from leadleboard.scoring import build_report
@@ -28,6 +29,51 @@ PERIOD = ReportingPeriod(
     start=datetime(2026, 9, 13, 21, tzinfo=UTC),
     end=datetime(2026, 9, 20, 21, tzinfo=UTC),
 )
+
+
+class FakeAuthor(DataModel):
+    id: int
+    display_name: str = ""
+    bot: bool = False
+
+
+class FakeEmbed(DataModel):
+    description: str | None = None
+
+
+class FakeMessage(DataModel):
+    id: int = 0
+    author: FakeAuthor
+    content: str
+    embeds: list[FakeEmbed] = Field(default_factory=list)
+
+
+class FakeGuildInfo(DataModel):
+    id: int
+    name: str
+
+
+class FakeRole(DataModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    name: str
+    default: bool = False
+    permissions: discord.Permissions = Field(default_factory=discord.Permissions.none)
+
+    def is_default(self) -> bool:
+        return self.default
+
+
+class FakeMember(DataModel):
+    roles: list[FakeRole]
+
+
+class FakeChannel(DataModel):
+    id: int
+    name: str
+    visible: bool
+
+    def permissions_for(self, member: object) -> discord.Permissions:
+        return discord.Permissions(view_channel=self.visible)
 
 
 class FakeThread:
@@ -73,8 +119,8 @@ class FakeParent:
         self.attach_files = attach_files
         self.has_message = has_message
 
-    def permissions_for(self, member: object) -> SimpleNamespace:
-        return SimpleNamespace(
+    def permissions_for(self, member: object) -> discord.Permissions:
+        return discord.Permissions(
             view_channel=True,
             read_message_history=True,
             send_messages=True,
@@ -106,12 +152,11 @@ class FakeGuild:
     ) -> None:
         self.active = active
         self.channels = channels or []
-        self.me = SimpleNamespace(
+        self.me = FakeMember(
             roles=[
-                SimpleNamespace(name="@everyone", is_default=lambda: True),
-                SimpleNamespace(
+                FakeRole(name="@everyone", default=True),
+                FakeRole(
                     name="leadleboard",
-                    is_default=lambda: False,
                     permissions=role_permissions or discord.Permissions.none(),
                 ),
             ]
@@ -124,7 +169,7 @@ class FakeGuild:
 def config() -> Config:
     """Build test configuration."""
     return Config(
-        token="token",
+        token=SecretStr("token"),
         guild_id=1,
         channel_id=10,
         timezone=ZoneInfo("America/Chicago"),
@@ -138,7 +183,7 @@ async def run_access_check(
     parent: FakeParent,
     guild: FakeGuild,
     settings: Config,
-    other_guilds: list[SimpleNamespace] | None = None,
+    other_guilds: list[FakeGuildInfo] | None = None,
 ) -> list[str]:
     """Run the access check with Discord test objects."""
 
@@ -148,7 +193,11 @@ async def run_access_check(
     monkeypatch.setattr(discord_app, "fetch_parent", fetch_parent)
     client = cast(
         discord.Client,
-        SimpleNamespace(get_guild=lambda guild_id: guild, guilds=[guild, *(other_guilds or [])]),
+        Mock(
+            spec=discord.Client,
+            get_guild=Mock(return_value=guild),
+            guilds=[guild, *(other_guilds or [])],
+        ),
     )
     return await check_access(client, settings)
 
@@ -158,14 +207,14 @@ async def test_find_existing_report(author_id: int, expected: int | None) -> Non
     class HistoryChannel:
         """Provide the history interface used by duplicate detection."""
 
-        async def history(self, **kwargs: object) -> AsyncIterator[SimpleNamespace]:
-            yield SimpleNamespace(
+        async def history(self, **kwargs: object) -> AsyncIterator[FakeMessage]:
+            yield FakeMessage(
                 id=123,
-                author=SimpleNamespace(id=author_id),
+                author=FakeAuthor(id=author_id),
                 content=report_marker(date(2026, 9, 14), date(2026, 9, 20)),
             )
 
-    client = cast(discord.Client, SimpleNamespace(user=SimpleNamespace(id=42)))
+    client = cast(discord.Client, Mock(spec=discord.Client, user=FakeAuthor(id=42)))
     channel = cast(discord.TextChannel, HistoryChannel())
 
     assert await find_existing_report(client, channel, PERIOD) == expected
@@ -222,22 +271,23 @@ async def test_check_access_allows_no_public_threads(monkeypatch: pytest.MonkeyP
 async def test_collect_report_parses_each_game_from_any_channel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user = SimpleNamespace(id=42, display_name="Ada", bot=False)
-    bot = SimpleNamespace(id=7, display_name="Bot", bot=True)
-    combined = SimpleNamespace(
+    user = FakeAuthor(id=42, display_name="Ada", bot=False)
+    bot = FakeAuthor(id=7, display_name="Bot", bot=True)
+    combined = FakeMessage(
         author=user,
         content=(
             "Size It Up\nOverall Score 254\nhttps://magnitudle.com/size-it-up\n"
-            "RNGdle 🎲 122228\n203,506 EP\nhttps://rngdle.com"
+            "RNGdle 🎲 122228\n203,506 EP\nhttps://rngdle.com\n"
+            "WikiRNG 🎲 Juybadam\n33,647 SP\nhttps://wikirng.com/"
         ),
         embeds=[],
     )
-    dartwords = SimpleNamespace(
+    dartwords = FakeMessage(
         author=user,
         content="https://www.dartwords.com/share?id=tl7i9vhphy",
-        embeds=[SimpleNamespace(description="I solved today's Dartwords in 5 guesses!")],
+        embeds=[FakeEmbed(description="I solved today's Dartwords in 5 guesses!")],
     )
-    ignored = SimpleNamespace(
+    ignored = FakeMessage(
         author=bot,
         content="Size It Up\nOverall Score 500\nhttps://magnitudle.com/size-it-up",
         embeds=[],
@@ -246,11 +296,11 @@ async def test_collect_report_parses_each_game_from_any_channel(
     class HistoryChannel:
         """Provide messages for report collection."""
 
-        def __init__(self, messages: list[SimpleNamespace]) -> None:
+        def __init__(self, messages: list[FakeMessage]) -> None:
             self.messages = messages
-            self.guild = SimpleNamespace()
+            self.guild = FakeGuildInfo(id=1, name="Friends")
 
-        async def history(self, **kwargs: object) -> AsyncIterator[SimpleNamespace]:
+        async def history(self, **kwargs: object) -> AsyncIterator[FakeMessage]:
             for message in self.messages:
                 yield message
 
@@ -271,6 +321,7 @@ async def test_collect_report_parses_each_game_from_any_channel(
     assert report.games[Game.SIZE_IT_UP][0].score.value == 254
     assert report.games[Game.RNGDLE][0].score.value == 203506
     assert report.games[Game.DARTWORDS][0].score.value == 5
+    assert report.games[Game.WIKIRNG][0].score.value == 33647
     assert report.overall[0].display_name == "Ada"
 
 
@@ -278,16 +329,16 @@ async def test_collect_report_parses_each_game_from_any_channel(
     ("channels", "other_guilds", "role_permissions", "expected"),
     [
         ([], [], discord.Permissions.none(), []),
-        ([SimpleNamespace(id=20, name="general", visible=False)], [], None, []),
+        ([FakeChannel(id=20, name="general", visible=False)], [], None, []),
         (
-            [SimpleNamespace(id=20, name="general", visible=True)],
+            [FakeChannel(id=20, name="general", visible=True)],
             [],
             None,
             ["Warning: the bot can view #general"],
         ),
         (
             [],
-            [SimpleNamespace(id=2, name="Other")],
+            [FakeGuildInfo(id=2, name="Other")],
             None,
             ["Warning: the bot is also in the guild Other"],
         ),
@@ -301,16 +352,12 @@ async def test_collect_report_parses_each_game_from_any_channel(
 )
 async def test_check_access_warns_about_wider_access(
     monkeypatch: pytest.MonkeyPatch,
-    channels: list[SimpleNamespace],
-    other_guilds: list[SimpleNamespace],
+    channels: list[FakeChannel],
+    other_guilds: list[FakeGuildInfo],
     role_permissions: discord.Permissions | None,
     expected: list[str],
 ) -> None:
     parent = FakeParent([])
-    for channel in channels:
-        channel.permissions_for = lambda member, visible=channel.visible: SimpleNamespace(
-            view_channel=visible
-        )
     guild = FakeGuild([], channels=[parent, *channels], role_permissions=role_permissions)
 
     details = await run_access_check(monkeypatch, parent, guild, config(), other_guilds)
@@ -339,10 +386,22 @@ async def test_discover_public_threads_stops_at_old_archived_threads() -> None:
 @pytest.mark.parametrize(
     ("scores", "expect_embed"),
     [
-        ([Score(1, "Ada", Game.RNGDLE, 203506)], True),
-        ([Score(index, f"Player {index}", Game.RNGDLE, index) for index in range(40)], True),
-        ([Score(index, f"Player {index}", Game.RNGDLE, index) for index in range(200)], False),
-        ([Score(1, "Ada", Game.RNGDLE, 10**1500)], False),
+        ([Score(user_id=1, display_name="Ada", game=Game.RNGDLE, value=203506)], True),
+        (
+            [
+                Score(user_id=index, display_name=f"Player {index}", game=Game.RNGDLE, value=index)
+                for index in range(40)
+            ],
+            True,
+        ),
+        (
+            [
+                Score(user_id=index, display_name=f"Player {index}", game=Game.RNGDLE, value=index)
+                for index in range(200)
+            ],
+            False,
+        ),
+        ([Score(user_id=1, display_name="Ada", game=Game.RNGDLE, value=10**1500)], False),
     ],
 )
 async def test_publish_report_sends_valid_fields_or_a_file(
@@ -382,3 +441,21 @@ async def test_run_discord_action_requires_a_started_action(
 
     with pytest.raises(RuntimeError, match="before the action started"):
         await run_discord_action("token", action)
+
+
+async def test_run_discord_action_closes_client_after_connection_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    start = AsyncMock(side_effect=RuntimeError("connection failed"))
+    close = AsyncMock()
+    monkeypatch.setattr(discord_app.ActionClient, "start", start)
+    monkeypatch.setattr(discord_app.ActionClient, "close", close)
+
+    async def action(client: discord.Client) -> int:
+        return 1
+
+    with pytest.raises(RuntimeError, match="connection failed"):
+        await run_discord_action("token", action)
+    close.assert_awaited_once()

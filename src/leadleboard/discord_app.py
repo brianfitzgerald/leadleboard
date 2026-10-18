@@ -11,8 +11,8 @@ import httpx
 
 from leadleboard.config import Config
 from leadleboard.models import Game, Score, WeeklyReport
-from leadleboard.parsers import parse_dartwords, parse_rngdle, parse_size_it_up
-from leadleboard.report import render_text, report_marker, report_sections
+from leadleboard.parsers import parse_dartwords, parse_rngdle, parse_size_it_up, parse_wikirng
+from leadleboard.report import build_message_payload, report_marker
 from leadleboard.schedule import ReportingPeriod
 from leadleboard.scoring import build_report
 
@@ -54,10 +54,9 @@ async def run_discord_action[T](token: str, action: Callable[[discord.Client], A
     """Connect a short-lived Discord client and return its action result."""
     client = ActionClient(action)
     try:
-        async with asyncio.timeout(600):
+        async with client, asyncio.timeout(600):
             await client.start(token)
     except TimeoutError as error:
-        await client.close()
         raise RuntimeError("The Discord action did not finish in 10 minutes") from error
     if client.error is not None:
         raise client.error
@@ -123,6 +122,7 @@ async def collect_report(parent: discord.TextChannel, period: ReportingPeriod) -
                 values = {
                     Game.SIZE_IT_UP: parse_size_it_up(message.content),
                     Game.RNGDLE: parse_rngdle(message.content),
+                    Game.WIKIRNG: parse_wikirng(message.content),
                     Game.DARTWORDS: await parse_dartwords(
                         message.content,
                         descriptions,
@@ -161,41 +161,22 @@ async def find_existing_report(
 
 async def publish_report(channel: discord.TextChannel, report: WeeklyReport) -> discord.Message:
     """Post one report message or a text attachment when it is large."""
-    marker = report_marker(report.week_start, report.week_end)
-    text = render_text(report)
-    sections = report_sections(report, markdown=True)
-    oversized = any(len(line) > 1000 for _, lines in sections for line in lines)
-    embed = discord.Embed(color=discord.Color.gold())
-    total_length = len(marker)
-    field_count = 0
-    for title, lines in sections:
-        chunks: list[str] = []
-        current = ""
-        for line in lines:
-            candidate = f"{current}\n{line}" if current else line
-            if len(candidate) > 1000:
-                if current:
-                    chunks.append(current)
-                current = line
-            else:
-                current = candidate
-        if current:
-            chunks.append(current)
-        for index, chunk in enumerate(chunks):
-            field_title = title if index == 0 else f"{title} continued"
-            embed.add_field(name=field_title, value=chunk, inline=False)
-            total_length += len(field_title) + len(chunk)
-            field_count += 1
-
+    payload = build_message_payload(report)
     no_mentions = discord.AllowedMentions.none()
-    if not oversized and total_length <= 5800 and field_count <= 25:
-        return await channel.send(content=marker, embed=embed, allowed_mentions=no_mentions)
-
+    if payload.embed is not None:
+        embed = discord.Embed.from_dict(payload.embed.model_dump())
+        return await channel.send(
+            content=payload.content, embed=embed, allowed_mentions=no_mentions
+        )
+    if payload.attachment is None:
+        raise RuntimeError("The report payload has no embed or attachment")
     attachment = discord.File(
-        io.BytesIO(text.encode("utf-8")),
-        filename=f"high-scores-{report.week_start.isoformat()}.txt",
+        io.BytesIO(payload.attachment.text.encode("utf-8")),
+        filename=payload.attachment.filename,
     )
-    return await channel.send(content=marker, file=attachment, allowed_mentions=no_mentions)
+    return await channel.send(
+        content=payload.content, file=attachment, allowed_mentions=no_mentions
+    )
 
 
 async def check_access(client: discord.Client, config: Config) -> list[str]:
