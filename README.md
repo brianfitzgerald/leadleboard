@@ -48,7 +48,9 @@ game from each message. Thread names do not affect parsing. The bot sends messag
 parent channel. It does not receive message events. It does not need Administrator, Manage
 Threads, Create Threads, or Send Messages in Threads.
 
-## Preview
+## Local testing
+
+Use Modal for scheduled reports. Use the local CLI for manual testing.
 
 Preview the current week without posting or changing post state:
 
@@ -75,6 +77,14 @@ Discord embed layout and color are stored in JSON. If Discord needs
 a text attachment, the preview saves its exact bytes as `.txt` and `.md` files.
 JSON also stores scores, ranks, query times, server and channel IDs, and collection time.
 Repeated previews replace files for the same week in the selected directory.
+
+To post the last complete week once with duplicate checks:
+
+```sh
+uv run leadleboard run
+```
+
+This command sends a real report to the configured channel and saves local post history.
 
 ## Schedule on Modal
 
@@ -115,7 +125,6 @@ uv run modal run deploy/modal_app.py --action run
 
 The scheduled call uses the same normal posting action. State is copied to temporary local
 storage for file locking, then saved to the Volume after a successful call.
-Do not run a local posting schedule at the same time as Modal.
 
 Inspect private logs and stop the deployment with:
 

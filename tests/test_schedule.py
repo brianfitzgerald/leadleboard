@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from leadleboard.schedule import current_week_start, is_post_window, period_for_week
+from leadleboard.schedule import current_week_start, period_for_week
 
 ZONE = ZoneInfo("America/Chicago")
 
@@ -35,11 +35,3 @@ def test_period_requires_monday() -> None:
 
 def test_current_week_start() -> None:
     assert current_week_start(datetime(2026, 9, 20, 20, tzinfo=ZONE)) == date(2026, 9, 14)
-
-
-def test_post_window() -> None:
-    scheduled = datetime(2026, 9, 20, 21, 0, tzinfo=ZONE)
-    assert is_post_window(scheduled, scheduled)
-    assert is_post_window(scheduled + timedelta(minutes=9, seconds=59), scheduled)
-    assert not is_post_window(scheduled - timedelta(seconds=1), scheduled)
-    assert not is_post_window(scheduled + timedelta(minutes=10), scheduled)

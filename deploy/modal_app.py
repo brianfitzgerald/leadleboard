@@ -88,7 +88,7 @@ def weekly_report(action: str = "run") -> str:
                     if saved_state.exists():
                         local_state.write_bytes(saved_state.read_bytes())
                     os.environ["LEADLEBOARD_STATE_PATH"] = str(local_state)
-                    LeadleboardCli().run(ignore_schedule=True)
+                    LeadleboardCli().run()
                     saved_state.write_bytes(local_state.read_bytes())
                     volume.commit()
             finally:

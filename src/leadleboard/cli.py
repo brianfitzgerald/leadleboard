@@ -23,7 +23,6 @@ from leadleboard.report import build_message_payload, render_markdown, save_prev
 from leadleboard.schedule import (
     ReportingPeriod,
     current_week_start,
-    is_post_window,
     period_for_week,
 )
 from leadleboard.state import PostState
@@ -76,8 +75,8 @@ class LeadleboardCli:
             save_preview(snapshot, Path(output_dir), f"high-scores-{week_start.isoformat()}", image)
         print(render_markdown(snapshot.payload))
 
-    def run(self, ignore_schedule: bool = False) -> None:
-        """Post the weekly report once, with an optional schedule bypass."""
+    def run(self) -> None:
+        """Post the last complete weekly report once."""
         config = Config.load()
         now = datetime.now(config.timezone)
         period = period_for_week(
@@ -85,10 +84,6 @@ class LeadleboardCli:
             config.report_time,
             config.timezone,
         )
-        if not ignore_schedule and not is_post_window(now, period.end):
-            raise RuntimeError(
-                f"Posting is allowed only for 10 minutes from {period.end.isoformat()}"
-            )
         if now < period.end:
             period = period_for_week(
                 period.week_start - timedelta(days=7),

@@ -43,22 +43,7 @@ def configured_cli(monkeypatch: pytest.MonkeyPatch) -> cli.LeadleboardCli:
     )
     monkeypatch.setattr(cli.Config, "load", lambda: config)
     monkeypatch.setattr(cli, "PostState", PostedState)
-    monkeypatch.setattr(cli, "is_post_window", lambda now, end: False)
     return cli.LeadleboardCli()
-
-
-def test_run_rejects_time_outside_schedule(configured_cli: cli.LeadleboardCli) -> None:
-    with pytest.raises(RuntimeError, match="Posting is allowed only"):
-        configured_cli.run()
-
-
-def test_run_can_ignore_schedule(
-    configured_cli: cli.LeadleboardCli,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    configured_cli.run(ignore_schedule=True)
-
-    assert "report was already posted" in capsys.readouterr().out
 
 
 def set_now(monkeypatch: pytest.MonkeyPatch, now: datetime) -> None:
@@ -71,10 +56,11 @@ def set_now(monkeypatch: pytest.MonkeyPatch, now: datetime) -> None:
     [
         (datetime(2026, 9, 16, 12, tzinfo=ZoneInfo("America/Chicago")), "2026-09-07"),
         (datetime(2026, 9, 20, 20, 59, tzinfo=ZoneInfo("America/Chicago")), "2026-09-07"),
+        (datetime(2026, 9, 20, 21, tzinfo=ZoneInfo("America/Chicago")), "2026-09-14"),
         (datetime(2026, 9, 20, 21, 30, tzinfo=ZoneInfo("America/Chicago")), "2026-09-14"),
     ],
 )
-def test_run_ignore_schedule_selects_the_last_complete_week(
+def test_run_selects_the_last_complete_week(
     configured_cli: cli.LeadleboardCli,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -83,7 +69,7 @@ def test_run_ignore_schedule_selects_the_last_complete_week(
 ) -> None:
     set_now(monkeypatch, now)
 
-    configured_cli.run(ignore_schedule=True)
+    configured_cli.run()
 
     assert f"The {expected_week} report was already posted." in capsys.readouterr().out
 
@@ -138,7 +124,7 @@ def test_run_records_found_or_posted_reports(
 
     monkeypatch.setattr(cli, "run_discord_action", run_action)
     app = cli.LeadleboardCli()
-    app.run(ignore_schedule=True)
+    app.run()
     history = PostHistory.model_validate_json(config.state_path.read_text())
     assert len(history.records) == 1
     assert history.records[0].message_id == (existing_id or 456)
@@ -148,7 +134,7 @@ def test_run_records_found_or_posted_reports(
         collect.assert_not_awaited()
     else:
         publish.assert_awaited_once()
-    app.run(ignore_schedule=True)
+    app.run()
     assert len(PostHistory.model_validate_json(config.state_path.read_text()).records) == 1
 
 

@@ -54,8 +54,7 @@ def test_run_copies_state_and_commits_after_success(
     if existing:
         modal_settings.write_text("old state")
 
-    def run(*, ignore_schedule: bool = False) -> None:
-        assert ignore_schedule
+    def run() -> None:
         local_state = Path(os.environ["LEADLEBOARD_STATE_PATH"])
         assert local_state != modal_settings
         assert local_state.exists() == existing

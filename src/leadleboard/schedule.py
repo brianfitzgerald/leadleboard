@@ -1,4 +1,4 @@
-"""Calculate preview and scheduled report periods."""
+"""Calculate weekly report periods."""
 
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -22,8 +22,3 @@ def period_for_week(
 def current_week_start(now: datetime) -> date:
     """Return Monday for the supplied local time."""
     return now.date() - timedelta(days=now.weekday())
-
-
-def is_post_window(now: datetime, scheduled_at: datetime) -> bool:
-    """Allow posts during the first ten minutes after the schedule."""
-    return scheduled_at <= now < scheduled_at + timedelta(minutes=10)
