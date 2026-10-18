@@ -2,34 +2,6 @@
 
 Leadleboard reads weekly game results from Discord threads and posts one high score report.
 
-## Scoring
-
-- The report period starts at the previous Sunday report time and ends Sunday at the configured
-  report time. A result posted after the Sunday report counts for the next week.
-- Each player keeps their best result for each game.
-- Higher scores win Size It Up, RNGdle, and WikiRNG. Fewer guesses win Dartwords.
-- WikiRNG uses the SP value in the shared result.
-- With `N` players in a game, ranks receive `N` through `1` points.
-- Tied players receive the same competition-rank points. A missing game receives zero points.
-
-## Highlights
-
-The report attaches one PNG of stat cards. Each card uses the player's Discord avatar:
-
-- MVP: the first overall player, with points, game wins, and games played.
-- One card for the leader of each game.
-
-Cards are two per row. With an odd card count, the MVP card is large on the left.
-A tied game leader card shows the tie count. The image is a message attachment above the
-embed, so Discord shows it at full width.
-
-The embed has two monospace tables: standings with points and game wins, and the best score
-for each game. Tables are at most 30 characters wide so they do not wrap on phones. Long
-standings continue in more fields.
-
-Cards use the Bebas Neue font (SIL Open Font License, `src/leadleboard/assets/OFL.txt`).
-If an avatar cannot be downloaded, the card shows the player's initials.
-
 ## Install
 
 Install the project and development tools:
@@ -107,14 +79,7 @@ Repeated previews replace files for the same week in the selected directory.
 ## Schedule on Modal
 
 The current Modal deployment uses Brian Test Server, channel `dle`. It runs Sunday at
-21:00 in `America/Chicago`, including daylight saving changes. It requests 0.125 CPU cores
-and 128 MiB RAM, with one container at a time and no warm containers. Actual resource use
-above these requests is billed by Modal. Each call has an 11-minute timeout and one retry.
-
-Install the development tools with `uv sync`. Use the existing Modal login, or run
-`uv run modal token new`. Create Secret `leadleboard-discord-test` in the Modal dashboard
-with `DISCORD_TOKEN`, `DISCORD_GUILD_ID`, and `DISCORD_CHANNEL_ID` for the test server.
-Do not put credentials in source files or command arguments.
+21:00 in `America/Chicago`, including daylight saving changes. 
 
 Create a stable v1 Volume named `leadleboard-state-test`. If local post history exists,
 upload `.data/post-state.json` as `/post-state.json` before the first deployment.
@@ -134,7 +99,6 @@ uv run modal run deploy/modal_app.py --action preview
 ```
 
 These commands call the deployed function; they do not invoke a second report writer.
-The preview uses the last complete week, which matches the deployment test post.
 To send one explicit test post:
 
 ```sh
@@ -150,8 +114,7 @@ uv run modal run deploy/modal_app.py --action run
 ```
 
 The scheduled call uses the same normal posting action. State is copied to temporary local
-storage for file locking, then saved to the Volume after a successful call. If a post succeeds
-before state is saved, the next call checks Discord for the existing report.
+storage for file locking, then saved to the Volume after a successful call.
 Do not run a local posting schedule at the same time as Modal.
 
 Inspect private logs and stop the deployment with:
@@ -160,51 +123,6 @@ Inspect private logs and stop the deployment with:
 uv run modal app logs leadleboard
 uv run modal app stop leadleboard
 ```
-
-Stopping the app also stops its schedule. Redeploy to start it again. A future production
-deployment must use separate secrets and state, and must replace the test schedule.
-Report logs can contain Discord names, IDs, and scores. Keep them private.
-
-## Schedule on macOS
-
-`run` posts only during the first ten minutes after the configured Sunday report time. It
-uses locked JSON post history and the Discord report marker to prevent a second weekly post.
-
-To post outside the schedule window, use:
-
-```sh
-uv run leadleboard run --ignore-schedule
-```
-
-This option posts the last complete week. Before the Sunday report time, that is the previous
-week. This option does not bypass the weekly duplicate protection.
-
-Open the current user's crontab:
-
-```sh
-crontab -e
-```
-
-Add this entry:
-
-```cron
-0 21 * * 0 cd /Users/brian/repos/leadleboard && /opt/homebrew/bin/uv run leadleboard run >> /Users/brian/Library/Logs/leadleboard.log 2>&1
-```
-
-The cron time must match `LEADLEBOARD_REPORT_TIME`. The Mac timezone must match
-`LEADLEBOARD_TIMEZONE`, which defaults to `America/Chicago`. The Mac must be awake at the scheduled time because cron does
-not run missed jobs after sleep.
-
-## Post history
-
-The default state file is `.data/post-state.json`. Each record stores the week, server ID,
-channel ID, message ID, record time, and whether the report was posted or found in Discord.
-A separate `.lock` file protects each run. State writes replace the JSON file atomically.
-
-The first run imports an existing `.data/post-state` date without changing the old file.
-A configured date-only state file is converted in place. Imported dates keep their duplicate
-protection; unknown metadata stays empty. Invalid state stops the run without changing the file.
-Preview and smoke tests do not change post history.
 
 ## Smoke tests
 
