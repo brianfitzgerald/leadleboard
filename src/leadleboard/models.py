@@ -29,6 +29,7 @@ class Score(DataModel):
     display_name: str
     game: Game
     value: int
+    avatar_url: str | None = None
 
 
 class GameStanding(DataModel):
@@ -42,10 +43,22 @@ class GameStanding(DataModel):
 class OverallStanding(DataModel):
     """One player in the overall ranking."""
 
+    user_id: int
     display_name: str
     rank: int
     points: int
     values: dict[Game, int | None]
+
+
+class Highlight(DataModel):
+    """One player stat card, such as the MVP or the longest streak."""
+
+    title: str
+    subtitle: str
+    display_name: str
+    avatar_url: str | None
+    color: int
+    stats: list[tuple[str, str]]
 
 
 class WeeklyReport(DataModel):
@@ -55,6 +68,7 @@ class WeeklyReport(DataModel):
     week_end: date
     games: dict[Game, list[GameStanding]]
     overall: list[OverallStanding]
+    highlights: list[Highlight] = Field(default_factory=list)
 
 
 class ReportingPeriod(DataModel):
@@ -78,13 +92,28 @@ class EmbedField(DataModel):
     inline: bool = False
 
 
+class EmbedImage(DataModel):
+    """An embed image URL."""
+
+    url: str
+
+
+class EmbedFooter(DataModel):
+    """The embed footer text."""
+
+    text: str
+
+
 class EmbedPayload(DataModel):
     """The Discord report embed."""
 
     type: Literal["rich"] = "rich"
     color: int = 0xF1C40F
     flags: Literal[0] = 0
+    description: str | None = None
     fields: list[EmbedField]
+    image: EmbedImage | None = None
+    footer: EmbedFooter | None = None
 
 
 class AttachmentPayload(DataModel):
@@ -106,6 +135,7 @@ class MessagePayload(DataModel):
     content: str
     embed: EmbedPayload | None = None
     attachment: AttachmentPayload | None = None
+    image_filename: str | None = None
     allowed_mentions: MentionSettings = Field(default_factory=MentionSettings)
 
 

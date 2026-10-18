@@ -8,6 +8,7 @@ from pathlib import Path
 import discord
 import fire
 
+from leadleboard.cards import render_highlights
 from leadleboard.config import Config
 from leadleboard.discord_app import (
     check_access,
@@ -62,16 +63,17 @@ class LeadleboardCli:
             return await collect_report(parent, period)
 
         report = asyncio.run(run_discord_action(config.token.get_secret_value(), action))
+        image = asyncio.run(render_highlights(report.highlights))
         snapshot = PreviewSnapshot(
             collected_at=datetime.now(UTC),
             guild_id=config.guild_id,
             channel_id=config.channel_id,
             period=period,
             report=report,
-            payload=build_message_payload(report),
+            payload=build_message_payload(report, image=image is not None),
         )
         if output_dir is not None:
-            save_preview(snapshot, Path(output_dir), f"high-scores-{week_start.isoformat()}")
+            save_preview(snapshot, Path(output_dir), f"high-scores-{week_start.isoformat()}", image)
         print(render_markdown(snapshot.payload))
 
     def run(self, ignore_schedule: bool = False) -> None:
@@ -104,7 +106,9 @@ class LeadleboardCli:
                 existing_id = await find_existing_report(client, parent, period)
                 if existing_id is not None:
                     return PostResult(message_id=existing_id, posted=False)
-                message = await publish_report(parent, await collect_report(parent, period))
+                report = await collect_report(parent, period)
+                image = await render_highlights(report.highlights)
+                message = await publish_report(parent, report, image)
                 return PostResult(message_id=message.id, posted=True)
 
             result = asyncio.run(run_discord_action(config.token.get_secret_value(), action))

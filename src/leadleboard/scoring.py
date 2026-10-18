@@ -3,16 +3,38 @@
 from collections import defaultdict
 from datetime import date
 
-from leadleboard.models import Game, GameStanding, OverallStanding, Score, WeeklyReport
+from leadleboard.models import (
+    Game,
+    GameStanding,
+    Highlight,
+    OverallStanding,
+    Score,
+    WeeklyReport,
+)
+
+GAME_COLORS = {
+    Game.SIZE_IT_UP: 0x3498DB,
+    Game.RNGDLE: 0x9B59B6,
+    Game.DARTWORDS: 0xE74C3C,
+    Game.WIKIRNG: 0x2ECC71,
+}
+GAME_LABELS = {
+    Game.SIZE_IT_UP: ("High score", "Score", "Score"),
+    Game.RNGDLE: ("High score", "EP", "EP"),
+    Game.DARTWORDS: ("Fewest guesses", "Guess", "Guesses"),
+    Game.WIKIRNG: ("High score", "SP", "SP"),
+}
 
 
 def build_report(scores: list[Score], week_start: date, week_end: date) -> WeeklyReport:
     """Build game and overall rankings from parsed scores."""
     by_game_user: dict[Game, dict[int, list[Score]]] = defaultdict(lambda: defaultdict(list))
     names: dict[int, str] = {}
+    avatars: dict[int, str | None] = {}
     for score in scores:
         by_game_user[score.game][score.user_id].append(score)
         names[score.user_id] = score.display_name
+        avatars[score.user_id] = score.avatar_url
 
     game_results: dict[Game, list[GameStanding]] = {}
     point_totals: dict[int, int] = defaultdict(int)
@@ -59,6 +81,7 @@ def build_report(scores: list[Score], week_start: date, week_end: date) -> Weekl
         rank = previous_rank if points == previous_points else index
         overall.append(
             OverallStanding(
+                user_id=user_id,
                 display_name=names[user_id],
                 rank=rank,
                 points=points,
@@ -68,9 +91,56 @@ def build_report(scores: list[Score], week_start: date, week_end: date) -> Weekl
         previous_points = points
         previous_rank = rank
 
+    def stat(value: int, singular: str, plural: str) -> tuple[str, str]:
+        """Return a formatted value and its label."""
+        return f"{value:,}", singular if value == 1 else plural
+
+    highlights: list[Highlight] = []
+    if overall:
+        mvp = overall[0]
+        wins = sum(
+            standing.score.user_id == mvp.user_id and standing.rank == 1
+            for standings in game_results.values()
+            for standing in standings
+        )
+        played = sum(value is not None for value in mvp.values.values())
+        highlights.append(
+            Highlight(
+                title="MVP",
+                subtitle=f"{week_start:%b %d} - {week_end:%b %d}",
+                display_name=mvp.display_name,
+                avatar_url=avatars[mvp.user_id],
+                color=0xF1C40F,
+                stats=[
+                    stat(mvp.points, "Pt", "Pts"),
+                    stat(wins, "Win", "Wins"),
+                    stat(played, "Game", "Games"),
+                ],
+            )
+        )
+    for game, standings in game_results.items():
+        if not standings:
+            continue
+        leader = standings[0].score
+        subtitle, singular, plural = GAME_LABELS[game]
+        highlights.append(
+            Highlight(
+                title=game.value,
+                subtitle=subtitle,
+                display_name=leader.display_name,
+                avatar_url=avatars[leader.user_id],
+                color=GAME_COLORS[game],
+                stats=[
+                    stat(leader.value, singular, plural),
+                    stat(len(standings), "Player", "Players"),
+                ],
+            )
+        )
+
     return WeeklyReport(
         week_start=week_start,
         week_end=week_end,
         games=game_results,
         overall=overall,
+        highlights=highlights,
     )

@@ -31,7 +31,7 @@ def test_discord_report_escapes_markdown_in_names() -> None:
     overall, size_it_up, *_ = report_sections(report, markdown=True)
 
     assert r"**\*\*Ada\*\***" in overall[1][0]
-    assert r"**\*\*Ada\*\***" in size_it_up[1][0]
+    assert r"\*\*Ada\*\*" in size_it_up[1][0]
     assert "**Ada**" in report_sections(report)[0][1][0]
 
 
@@ -45,9 +45,9 @@ def test_discord_report_uses_markdown_and_emojis() -> None:
     sections = report_sections(report, markdown=True)
 
     assert sections[0][0] == "🏆 Overall"
-    assert sections[0][1] == ["🥇 **Ada** • **1 pt**\n> 📏 `254` • 🎲 `-` • 🎯 `-` • 📚 `-`"]
+    assert sections[0][1] == ["🥇 **Ada** · `1 pt`\n-# 📏 254 · 🎲 - · 🎯 - · 📚 -"]
     assert sections[1][0] == "📏 Size It Up"
-    assert sections[1][1] == ["🥇 **Ada** — `254` • **1 pt**"]
+    assert sections[1][1] == ["🥇 Ada\n-# `254`"]
 
 
 def test_wikirng_report_uses_sp() -> None:
@@ -59,9 +59,23 @@ def test_wikirng_report_uses_sp() -> None:
 
     sections = report_sections(report, markdown=True)
 
-    assert "📚 `33,647 SP`" in sections[0][1][0]
-    assert sections[-1] == ("📚 WikiRNG", ["🥇 **Ada** — `33,647 SP` • **1 pt**"])
+    assert "📚 33,647 SP" in sections[0][1][0]
+    assert sections[-1] == ("📚 WikiRNG", ["🥇 Ada\n-# `33,647 SP`"])
     assert "33,647 SP" in render_text(report)
+
+
+@pytest.mark.parametrize("count", [5, 6])
+def test_game_fields_show_top_three(count: int) -> None:
+    scores = [
+        Score(user_id=index, display_name=f"P{index}", game=Game.RNGDLE, value=index)
+        for index in range(count)
+    ]
+    report = build_report(scores, date(2026, 9, 14), date(2026, 9, 20))
+
+    lines = report_sections(report, markdown=True)[2][1]
+
+    assert lines[-1] == f"-# +{count - 3} more"
+    assert len(lines) == 4
 
 
 @pytest.mark.parametrize("count", [0, 1, 40, 200])
@@ -76,7 +90,8 @@ async def test_saved_preview_matches_publish_payload(tmp_path: Path, count: int)
         start=datetime(2026, 9, 13, 21, tzinfo=UTC),
         end=datetime(2026, 9, 20, 21, tzinfo=UTC),
     )
-    payload = build_message_payload(report)
+    image = b"png" if count else None
+    payload = build_message_payload(report, image=image is not None)
     snapshot = PreviewSnapshot(
         collected_at=datetime.now(UTC),
         guild_id=1,
@@ -86,22 +101,31 @@ async def test_saved_preview_matches_publish_payload(tmp_path: Path, count: int)
         payload=payload,
     )
     directory = tmp_path / "previews"
-    save_preview(snapshot, directory, "report")
+    paths = save_preview(snapshot, directory, "report", image)
 
     channel = AsyncMock(spec=discord.TextChannel)
-    await publish_report(channel, report)
+    await publish_report(channel, report, image)
     sent = channel.send.call_args.kwargs
     assert sent["content"] == payload.content
+    image_link = [] if image is None else ["![Highlights](highlights-2026-09-14.png)"]
+    if image is not None:
+        assert (directory / "highlights-2026-09-14.png").read_bytes() == image
+        assert sent["files"][-1].fp.read() == image
+    assert [path.name for path in paths][:2] == ["report.md", "report.json"]
     if payload.embed is not None:
-        assert sent["embed"].to_dict() == payload.embed.model_dump()
+        assert sent["embed"].to_dict() == payload.embed.model_dump(exclude_none=True)
         pieces = [sent["content"]]
+        if sent["embed"].description:
+            pieces.append(sent["embed"].description)
         for field in sent["embed"].fields:
-            pieces.extend((field.name, field.value))
-        assert (directory / "report.md").read_text() == "\n\n".join(pieces)
+            if field.name != "\u200b":
+                pieces.extend((f"### {field.name}", field.value))
+        pieces.append(f"-# {sent['embed'].footer.text}")
+        assert (directory / "report.md").read_text() == "\n\n".join([*pieces, *image_link])
     else:
         assert payload.attachment is not None
-        content = sent["file"].fp.read()
-        assert (directory / "report.md").read_text() == sent["content"]
+        content = sent["files"][0].fp.read()
+        assert (directory / "report.md").read_text() == "\n\n".join([sent["content"], *image_link])
         assert (directory / payload.attachment.filename).read_bytes() == content
         assert (directory / "report-attachment.md").read_bytes() == content
     assert PreviewSnapshot.model_validate_json((directory / "report.json").read_text()) == snapshot

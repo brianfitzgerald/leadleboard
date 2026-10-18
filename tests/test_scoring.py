@@ -4,6 +4,26 @@ from leadleboard.models import Game, Score
 from leadleboard.scoring import build_report
 
 
+def test_highlights_cover_mvp_and_each_game_leader() -> None:
+    scores = [
+        Score(user_id=1, display_name="Ada", game=Game.SIZE_IT_UP, value=254, avatar_url="a"),
+        Score(user_id=2, display_name="Bob", game=Game.SIZE_IT_UP, value=100),
+        Score(user_id=1, display_name="Ada", game=Game.DARTWORDS, value=6, avatar_url="a"),
+        Score(user_id=2, display_name="Bob", game=Game.DARTWORDS, value=3),
+        Score(user_id=1, display_name="Ada", game=Game.RNGDLE, value=203506, avatar_url="a"),
+    ]
+
+    report = build_report(scores, date(2026, 10, 5), date(2026, 10, 11))
+
+    assert [(item.title, item.display_name, item.stats) for item in report.highlights] == [
+        ("MVP", "Ada", [("4", "Pts"), ("2", "Wins"), ("3", "Games")]),
+        ("Size It Up", "Ada", [("254", "Score"), ("2", "Players")]),
+        ("RNGdle", "Ada", [("203,506", "EP"), ("1", "Player")]),
+        ("Dartwords", "Bob", [("3", "Guesses"), ("2", "Players")]),
+    ]
+    assert report.highlights[0].avatar_url == "a"
+
+
 def test_build_report_selects_best_scores_and_awards_rank_points() -> None:
     def score(user_id: int, name: str, game: Game, value: int) -> Score:
         return Score(

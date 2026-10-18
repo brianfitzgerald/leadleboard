@@ -8,6 +8,7 @@ import discord
 import pytest
 
 import deploy.modal_app as deployment
+import leadleboard.cards as cards
 import leadleboard.cli as cli
 import leadleboard.discord_app as discord_app
 
@@ -100,6 +101,7 @@ def test_test_post_publishes_without_changing_state(
     monkeypatch.setattr(discord_app, "collect_report", AsyncMock(return_value=report))
     publisher = AsyncMock(return_value=Mock(id=123))
     monkeypatch.setattr(discord_app, "publish_report", publisher)
+    monkeypatch.setattr(cards, "render_highlights", AsyncMock(return_value=b"png"))
 
     async def run_action(token: str, action: Callable[[discord.Client], Awaitable[int]]) -> int:
         return await action(Mock())
@@ -109,7 +111,7 @@ def test_test_post_publishes_without_changing_state(
     result = deployment.weekly_report.local(action="test-post")
 
     assert "Posted deployment test message 123" in result
-    publisher.assert_awaited_once_with(parent, report)
+    publisher.assert_awaited_once_with(parent, report, b"png")
     cast(Mock, deployment.volume).commit.assert_not_called()
     assert not modal_settings.exists()
 

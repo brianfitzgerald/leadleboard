@@ -40,6 +40,7 @@ def weekly_report(action: str = "run") -> str:
 
     import discord
 
+    from leadleboard.cards import render_highlights
     from leadleboard.cli import LeadleboardCli
     from leadleboard.config import Config
     from leadleboard.discord_app import (
@@ -70,7 +71,9 @@ def weekly_report(action: str = "run") -> str:
 
             async def post(client: discord.Client) -> int:
                 parent = await fetch_parent(client, config)
-                message = await publish_report(parent, await collect_report(parent, period))
+                report = await collect_report(parent, period)
+                image = await render_highlights(report.highlights)
+                message = await publish_report(parent, report, image)
                 return message.id
 
             message_id = asyncio.run(run_discord_action(config.token.get_secret_value(), post))

@@ -31,10 +31,18 @@ PERIOD = ReportingPeriod(
 )
 
 
+class FakeAvatar(DataModel):
+    url: str = "https://cdn.example/avatar.png"
+
+    def replace(self, **kwargs: object) -> FakeAvatar:
+        return self
+
+
 class FakeAuthor(DataModel):
     id: int
     display_name: str = ""
     bot: bool = False
+    display_avatar: FakeAvatar = Field(default_factory=FakeAvatar)
 
 
 class FakeEmbed(DataModel):
@@ -323,6 +331,7 @@ async def test_collect_report_parses_each_game_from_any_channel(
     assert report.games[Game.DARTWORDS][0].score.value == 5
     assert report.games[Game.WIKIRNG][0].score.value == 33647
     assert report.overall[0].display_name == "Ada"
+    assert report.games[Game.RNGDLE][0].score.avatar_url == "https://cdn.example/avatar.png"
 
 
 @pytest.mark.parametrize(
@@ -417,15 +426,20 @@ async def test_publish_report_sends_valid_fields_or_a_file(
     channel = SendChannel()
     report = build_report(scores, PERIOD.week_start, PERIOD.week_end)
 
-    await publish_report(cast(discord.TextChannel, channel), report)
+    await publish_report(cast(discord.TextChannel, channel), report, b"png")
 
     mentions = cast(discord.AllowedMentions, channel.sent["allowed_mentions"])
     assert mentions.to_dict() == discord.AllowedMentions.none().to_dict()
     assert ("embed" in channel.sent) == expect_embed
-    assert ("file" in channel.sent) != expect_embed
+    files = cast(list[discord.File], channel.sent["files"])
+    assert [file.filename for file in files] == [
+        *([] if expect_embed else [f"high-scores-{PERIOD.week_start}.txt"]),
+        f"highlights-{PERIOD.week_start}.png",
+    ]
     if expect_embed:
         embed = cast(discord.Embed, channel.sent["embed"])
         assert all(0 < len(field.value or "") <= 1024 for field in embed.fields)
+        assert embed.image.url == f"attachment://highlights-{PERIOD.week_start}.png"
 
 
 async def test_run_discord_action_requires_a_started_action(

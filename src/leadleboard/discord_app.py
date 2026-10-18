@@ -138,6 +138,9 @@ async def collect_report(parent: discord.TextChannel, period: ReportingPeriod) -
                             display_name=message.author.display_name,
                             game=game,
                             value=value,
+                            avatar_url=message.author.display_avatar.replace(
+                                size=512, static_format="png"
+                            ).url,
                         )
                     )
 
@@ -159,24 +162,32 @@ async def find_existing_report(
     return None
 
 
-async def publish_report(channel: discord.TextChannel, report: WeeklyReport) -> discord.Message:
-    """Post one report message or a text attachment when it is large."""
-    payload = build_message_payload(report)
+async def publish_report(
+    channel: discord.TextChannel,
+    report: WeeklyReport,
+    image: bytes | None = None,
+) -> discord.Message:
+    """Post one report message with the highlight image, or a text attachment when it is large."""
+    payload = build_message_payload(report, image=image is not None)
     no_mentions = discord.AllowedMentions.none()
+    files: list[discord.File] = []
+    if image is not None and payload.image_filename is not None:
+        files.append(discord.File(io.BytesIO(image), filename=payload.image_filename))
     if payload.embed is not None:
-        embed = discord.Embed.from_dict(payload.embed.model_dump())
+        embed = discord.Embed.from_dict(payload.embed.model_dump(exclude_none=True))
         return await channel.send(
-            content=payload.content, embed=embed, allowed_mentions=no_mentions
+            content=payload.content, embed=embed, files=files, allowed_mentions=no_mentions
         )
     if payload.attachment is None:
         raise RuntimeError("The report payload has no embed or attachment")
-    attachment = discord.File(
-        io.BytesIO(payload.attachment.text.encode("utf-8")),
-        filename=payload.attachment.filename,
+    files.insert(
+        0,
+        discord.File(
+            io.BytesIO(payload.attachment.text.encode("utf-8")),
+            filename=payload.attachment.filename,
+        ),
     )
-    return await channel.send(
-        content=payload.content, file=attachment, allowed_mentions=no_mentions
-    )
+    return await channel.send(content=payload.content, files=files, allowed_mentions=no_mentions)
 
 
 async def check_access(client: discord.Client, config: Config) -> list[str]:

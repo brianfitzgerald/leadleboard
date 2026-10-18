@@ -12,6 +12,18 @@ Leadleboard reads weekly game results from Discord threads and posts one high sc
 - With `N` players in a game, ranks receive `N` through `1` points.
 - Tied players receive the same competition-rank points. A missing game receives zero points.
 
+## Highlights
+
+The report attaches one PNG of stat cards. Each card uses the player's Discord avatar:
+
+- MVP: the first overall player, with points, game wins, and games played.
+- One card for the leader of each game.
+
+Cards are two per row. With an odd card count, the MVP card is large on the left.
+
+Cards use the Bebas Neue font (SIL Open Font License, `src/leadleboard/assets/OFL.txt`).
+If an avatar cannot be downloaded, the card shows the player's initials.
+
 ## Install
 
 Install the project and development tools:
@@ -72,14 +84,15 @@ Preview a past week by its Monday date:
 uv run leadleboard preview --week 2026-09-14
 ```
 
-Print the exact Discord message text and save Markdown plus JSON:
+Print the exact Discord message text and save Markdown, JSON, and the highlight PNG:
 
 ```sh
 uv run leadleboard preview --output-dir .data/previews
 ```
 
-The Markdown keeps the message content, embed field names, and values unchanged. It inserts
-blank lines between fields. Discord embed layout and color are stored in JSON. If Discord needs
+The Markdown keeps the message content, embed description, field values, and footer
+unchanged. Field names become `###` headings, and the last line links the highlight PNG.
+Discord embed layout and color are stored in JSON. If Discord needs
 a text attachment, the preview saves its exact bytes as `.txt` and `.md` files.
 JSON also stores scores, ranks, query times, server and channel IDs, and collection time.
 Repeated previews replace files for the same week in the selected directory.
@@ -195,8 +208,8 @@ uv run pytest --run-smoke -m smoke
 ```
 
 Each run creates `.data/smoke-tests/<UTC timestamp>-<unique ID>/`. It saves `results.md`,
-`results.json`, and exact Markdown plus JSON previews for the current week, previous week,
-and last 90 days. Results include access warnings, errors, timing, and captured test output.
+`results.json`, and exact Markdown, JSON, and highlight PNG previews for the current week,
+previous week, and last 90 days. Results include access warnings, errors, timing, and captured test output.
 Results are written before collection and after each test phase, including failures and
 pytest interruptions. A forced process termination can leave the run marked incomplete.
 

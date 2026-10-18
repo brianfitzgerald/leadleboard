@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import discord
 import pytest
 
+from leadleboard.cards import render_highlights
 from leadleboard.config import Config
 from leadleboard.discord_app import check_access, collect_report, fetch_parent, run_discord_action
 from leadleboard.models import Game, PreviewSnapshot, ReportingPeriod, WeeklyReport
@@ -46,15 +47,16 @@ async def test_report(smoke_config: Config, smoke_run: SmokeRun, period_name: st
         return await collect_report(parent, period)
 
     report = await run_discord_action(smoke_config.token.get_secret_value(), action)
+    image = await render_highlights(report.highlights)
     snapshot = PreviewSnapshot(
         collected_at=datetime.now(UTC),
         guild_id=smoke_config.guild_id,
         channel_id=smoke_config.channel_id,
         period=period,
         report=report,
-        payload=build_message_payload(report),
+        payload=build_message_payload(report, image=image is not None),
     )
-    files = save_preview(snapshot, smoke_run.directory, period_name)
+    files = save_preview(snapshot, smoke_run.directory, period_name, image)
     smoke_run.results.artifacts.extend(path.name for path in files)
     smoke_run.save()
     assert set(report.games) == set(Game)
