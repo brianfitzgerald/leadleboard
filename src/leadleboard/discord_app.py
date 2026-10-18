@@ -10,10 +10,9 @@ import discord
 import httpx
 
 from leadleboard.config import Config
-from leadleboard.models import Game, Score, WeeklyReport
+from leadleboard.models import Game, ReportingPeriod, Score, WeeklyReport
 from leadleboard.parsers import parse_dartwords, parse_rngdle, parse_size_it_up, parse_wikirng
 from leadleboard.report import build_message_payload, report_marker
-from leadleboard.schedule import ReportingPeriod
 from leadleboard.scoring import build_report
 
 REQUIRED_PERMISSIONS = {

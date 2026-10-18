@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import discord
@@ -18,11 +18,11 @@ from leadleboard.discord_app import (
     publish_report,
     run_discord_action,
 )
-from leadleboard.models import PostResult, PreviewSnapshot, WeeklyReport
+from leadleboard.models import PostResult, PreviewSnapshot, ReportingPeriod, WeeklyReport
 from leadleboard.report import build_message_payload, render_markdown, save_preview
 from leadleboard.schedule import (
-    ReportingPeriod,
     current_week_start,
+    last_complete_period,
     period_for_week,
 )
 from leadleboard.state import PostState
@@ -79,17 +79,7 @@ class LeadleboardCli:
         """Post the last complete weekly report once."""
         config = Config.load()
         now = datetime.now(config.timezone)
-        period = period_for_week(
-            current_week_start(now),
-            config.report_time,
-            config.timezone,
-        )
-        if now < period.end:
-            period = period_for_week(
-                period.week_start - timedelta(days=7),
-                config.report_time,
-                config.timezone,
-            )
+        period = last_complete_period(now, config.report_time, config.timezone)
 
         with PostState(config.state_path) as state:
             if state.was_posted(period.week_start, config.guild_id, config.channel_id):

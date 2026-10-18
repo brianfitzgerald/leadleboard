@@ -29,22 +29,10 @@ class PostState:
             self._lock = None
             raise RuntimeError("Another run holds the post state lock") from error
         try:
-            source = self.path
-            if not source.exists() and self.path.name == "post-state.json":
-                source = self.path.with_name("post-state")
-            if source.exists():
-                text = source.read_text(encoding="utf-8").strip()
-                if text and not text.startswith("{"):
-                    week = date.fromisoformat(text)
-                    self.write(
-                        PostHistory(records=[PostRecord(week_start=week, outcome="imported")])
-                    )
-                elif text:
-                    self.history = PostHistory.model_validate_json(text)
-                    if source != self.path:
-                        self.write(self.history)
-                else:
-                    raise ValueError("Post state is empty")
+            if self.path.exists():
+                self.history = PostHistory.model_validate_json(
+                    self.path.read_text(encoding="utf-8")
+                )
         except Exception:
             self.__exit__(None, None, None)
             raise
@@ -62,7 +50,7 @@ class PostState:
             self._lock = None
 
     def was_posted(self, week_start: date, guild_id: int, channel_id: int) -> bool:
-        """Check scoped records and imported date-only records."""
+        """Check scoped records and existing imported dates."""
         if self._lock is None:
             raise RuntimeError("Post state is not locked")
         return any(
@@ -93,12 +81,7 @@ class PostState:
             recorded_at=datetime.now(UTC),
             outcome="posted" if posted else "found",
         )
-        self.write(PostHistory(records=[*self.history.records, record]))
-
-    def write(self, history: PostHistory) -> None:
-        """Replace the JSON file while retaining the state lock."""
-        if self._lock is None:
-            raise RuntimeError("Post state is not locked")
+        history = PostHistory(records=[*self.history.records, record])
         with NamedTemporaryFile(
             mode="w", encoding="utf-8", dir=self.path.parent, delete=False
         ) as file:

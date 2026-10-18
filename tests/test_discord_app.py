@@ -19,9 +19,8 @@ from leadleboard.discord_app import (
     publish_report,
     run_discord_action,
 )
-from leadleboard.models import DataModel, Game, Score
+from leadleboard.models import DataModel, Game, ReportingPeriod, Score
 from leadleboard.report import report_marker
-from leadleboard.schedule import ReportingPeriod
 from leadleboard.scoring import build_report
 
 PERIOD = ReportingPeriod(

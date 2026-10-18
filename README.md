@@ -85,11 +85,13 @@ uv run leadleboard run
 ```
 
 This command sends a real report to the configured channel and saves local post history.
+Post history uses JSON records scoped to the server and channel.
 
 ## Schedule on Modal
 
-The current Modal deployment uses Brian Test Server, channel `dle`. It runs Sunday at
-21:00 in `America/Chicago`, including daylight saving changes. 
+The Modal deployment runs Sunday at 21:00 in `America/Chicago`, including daylight saving changes.
+The `leadleboard-discord-test` Modal Secret must contain `DISCORD_TOKEN`,
+`DISCORD_GUILD_ID`, and `DISCORD_CHANNEL_ID` for the test server.
 
 Create a stable v1 Volume named `leadleboard-state-test`. If local post history exists,
 upload `.data/post-state.json` as `/post-state.json` before the first deployment.
@@ -147,8 +149,8 @@ previous week, and last 90 days. Results include access warnings, errors, timing
 Results are written before collection and after each test phase, including failures and
 pytest interruptions. A forced process termination can leave the run marked incomplete.
 
-The tests read the configured server and channel from `.env`. They require the known test
-scores for all three games in the last 90 days. They do not send Discord messages or change
+The tests read the configured server and channel from `.env`. They require existing
+Size It Up, RNGdle, and Dartwords scores in the last 90 days. They do not send Discord messages or change
 permissions. Missing configuration fails an explicit smoke run. Normal pytest runs skip
 live tests.
 

@@ -22,3 +22,12 @@ def period_for_week(
 def current_week_start(now: datetime) -> date:
     """Return Monday for the supplied local time."""
     return now.date() - timedelta(days=now.weekday())
+
+
+def last_complete_period(now: datetime, report_time: time, zone: ZoneInfo) -> ReportingPeriod:
+    """Return the last weekly period that ended by the supplied time."""
+    week = current_week_start(now)
+    period = period_for_week(week, report_time, zone)
+    if now < period.end:
+        period = period_for_week(week - timedelta(days=7), report_time, zone)
+    return period

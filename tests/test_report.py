@@ -7,7 +7,7 @@ import pytest
 
 from leadleboard.discord_app import publish_report
 from leadleboard.models import Game, PreviewSnapshot, ReportingPeriod, Score
-from leadleboard.report import build_message_payload, render_text, save_preview
+from leadleboard.report import build_message_payload, format_value, render_text, save_preview
 from leadleboard.scoring import build_report
 
 
@@ -177,3 +177,25 @@ def test_saved_preview_reports_write_failure(tmp_path: Path) -> None:
     )
     with pytest.raises(FileExistsError):
         save_preview(snapshot, directory, "report")
+
+
+@pytest.mark.parametrize("name", ["```Ada", "Ada\nBob", "Ada\tBob"])
+def test_player_names_cannot_break_table_rows(name: str) -> None:
+    report = build_report(
+        [Score(user_id=1, display_name=name, game=Game.RNGDLE, value=10)],
+        date(2026, 9, 14),
+        date(2026, 9, 20),
+    )
+
+    embed = build_message_payload(report).embed
+
+    assert embed is not None
+    for field in embed.fields:
+        assert len(field.value.splitlines()) == 5
+        assert field.value.count("```") == 2
+        assert "\t" not in field.value
+
+
+@pytest.mark.parametrize(("value", "expected"), [(1, "1 guess"), (2, "2 guesses")])
+def test_dartwords_guess_label(value: int, expected: str) -> None:
+    assert format_value(Game.DARTWORDS, value) == expected

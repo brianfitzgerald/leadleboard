@@ -51,7 +51,7 @@ class OverallStanding(DataModel):
 
 
 class Highlight(DataModel):
-    """One player stat card, such as the MVP or the longest streak."""
+    """One player stat card, for the overall or game leader."""
 
     title: str
     subtitle: str

@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from leadleboard.schedule import current_week_start, period_for_week
+from leadleboard.schedule import current_week_start, last_complete_period, period_for_week
 
 ZONE = ZoneInfo("America/Chicago")
 
@@ -35,3 +35,18 @@ def test_period_requires_monday() -> None:
 
 def test_current_week_start() -> None:
     assert current_week_start(datetime(2026, 9, 20, 20, tzinfo=ZONE)) == date(2026, 9, 14)
+
+
+@pytest.mark.parametrize(
+    ("now", "week"),
+    [
+        (datetime(2026, 9, 21, 12, tzinfo=ZONE), date(2026, 9, 14)),
+        (datetime(2026, 9, 20, 20, 59, tzinfo=ZONE), date(2026, 9, 7)),
+        (datetime(2026, 9, 20, 21, tzinfo=ZONE), date(2026, 9, 14)),
+        (datetime(2026, 11, 1, 21, tzinfo=ZONE), date(2026, 10, 26)),
+    ],
+)
+def test_last_complete_period(now: datetime, week: date) -> None:
+    period = last_complete_period(now, time(21), ZONE)
+    assert period.week_start == week
+    assert period.end <= now

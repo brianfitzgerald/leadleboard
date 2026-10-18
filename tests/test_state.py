@@ -30,26 +30,6 @@ def test_post_state_keeps_history_and_scope(tmp_path: Path, posted: bool) -> Non
     assert history.records[0].outcome == ("posted" if posted else "found")
 
 
-@pytest.mark.parametrize("same_path", [True, False])
-def test_import_date_only_state(tmp_path: Path, same_path: bool) -> None:
-    legacy = tmp_path / "post-state"
-    legacy.write_text("2026-09-07")
-    path = legacy if same_path else tmp_path / "post-state.json"
-    with PostState(path) as state:
-        assert state.was_posted(date(2026, 9, 7), 1, 10)
-        assert state.was_posted(date(2026, 9, 7), 2, 20)
-        state.record(date(2026, 9, 14), 1, 10, 123, True)
-    history = PostHistory.model_validate_json(path.read_text())
-    assert history.records[0].outcome == "imported"
-    assert history.records[0].guild_id is None
-    assert history.records[0].message_id is None
-    assert len(history.records) == 2
-    with PostState(path) as state:
-        assert len(state.history.records) == 2
-    if not same_path:
-        assert legacy.read_text() == "2026-09-07"
-
-
 def test_post_state_rejects_a_second_lock(tmp_path: Path) -> None:
     path = tmp_path / "post-state.json"
     with PostState(path) as state:
@@ -59,7 +39,7 @@ def test_post_state_rejects_a_second_lock(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "content", ["", "not a date", "[]", '{"schema_version":2}', '{"records":42}']
+    "content", ["", "not a date", "2026-09-07", "[]", '{"schema_version":2}', '{"records":42}']
 )
 def test_invalid_state_is_preserved_and_lock_is_released(tmp_path: Path, content: str) -> None:
     path = tmp_path / "post-state.json"
@@ -98,3 +78,13 @@ def test_unlocked_state_rejects_operations(tmp_path: Path) -> None:
         state.was_posted(date(2026, 9, 7), 1, 10)
     with pytest.raises(RuntimeError, match="not locked"):
         state.record(date(2026, 9, 7), 1, 10, 123, True)
+
+
+def test_existing_imported_record_is_preserved(tmp_path: Path) -> None:
+    path = tmp_path / "post-state.json"
+    path.write_text('{"records": [{"week_start": "2026-09-07", "outcome": "imported"}]}')
+    with PostState(path) as state:
+        assert state.was_posted(date(2026, 9, 7), 1, 10)
+        state.record(date(2026, 9, 14), 1, 10, 123, True)
+    history = PostHistory.model_validate_json(path.read_text())
+    assert [record.outcome for record in history.records] == ["imported", "posted"]

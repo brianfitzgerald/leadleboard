@@ -35,7 +35,7 @@ def weekly_report(action: str = "run") -> str:
     import io
     import os
     from contextlib import redirect_stdout
-    from datetime import datetime, timedelta
+    from datetime import datetime
     from tempfile import TemporaryDirectory
 
     import discord
@@ -49,16 +49,15 @@ def weekly_report(action: str = "run") -> str:
         publish_report,
         run_discord_action,
     )
-    from leadleboard.schedule import current_week_start, period_for_week
+    from leadleboard.schedule import last_complete_period
 
     if action not in {"run", "check", "preview", "test-post"}:
         raise ValueError(f"Unknown report action: {action}")
 
     config = Config.load()
     now = datetime.now(config.timezone)
-    week = current_week_start(now)
-    if now < period_for_week(week, config.report_time, config.timezone).end:
-        week -= timedelta(days=7)
+    period = last_complete_period(now, config.report_time, config.timezone)
+    week = period.week_start
 
     output = io.StringIO()
     with redirect_stdout(output):
@@ -67,7 +66,6 @@ def weekly_report(action: str = "run") -> str:
         elif action == "preview":
             LeadleboardCli().preview(week=week.isoformat())
         elif action == "test-post":
-            period = period_for_week(week, config.report_time, config.timezone)
 
             async def post(client: discord.Client) -> int:
                 parent = await fetch_parent(client, config)
@@ -80,16 +78,15 @@ def weekly_report(action: str = "run") -> str:
             print(f"Posted deployment test message {message_id} for {week.isoformat()}.")
         else:
             volume.reload()
-            saved_state = STATE_PATH
             previous_path = os.environ.get("LEADLEBOARD_STATE_PATH")
             try:
                 with TemporaryDirectory() as directory:
                     local_state = Path(directory) / "post-state.json"
-                    if saved_state.exists():
-                        local_state.write_bytes(saved_state.read_bytes())
+                    if STATE_PATH.exists():
+                        local_state.write_bytes(STATE_PATH.read_bytes())
                     os.environ["LEADLEBOARD_STATE_PATH"] = str(local_state)
                     LeadleboardCli().run()
-                    saved_state.write_bytes(local_state.read_bytes())
+                    STATE_PATH.write_bytes(local_state.read_bytes())
                     volume.commit()
             finally:
                 if previous_path is None:
