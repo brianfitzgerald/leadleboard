@@ -92,12 +92,6 @@ class EmbedField(DataModel):
     inline: bool = False
 
 
-class EmbedImage(DataModel):
-    """An embed image URL."""
-
-    url: str
-
-
 class EmbedFooter(DataModel):
     """The embed footer text."""
 
@@ -112,7 +106,6 @@ class EmbedPayload(DataModel):
     flags: Literal[0] = 0
     description: str | None = None
     fields: list[EmbedField]
-    image: EmbedImage | None = None
     footer: EmbedFooter | None = None
 
 

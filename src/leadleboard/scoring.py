@@ -123,10 +123,11 @@ def build_report(scores: list[Score], week_start: date, week_end: date) -> Weekl
             continue
         leader = standings[0].score
         subtitle, singular, plural = GAME_LABELS[game]
+        tied = sum(standing.rank == 1 for standing in standings)
         highlights.append(
             Highlight(
                 title=game.value,
-                subtitle=subtitle,
+                subtitle=f"{subtitle} · {tied}-way tie" if tied > 1 else subtitle,
                 display_name=leader.display_name,
                 avatar_url=avatars[leader.user_id],
                 color=GAME_COLORS[game],

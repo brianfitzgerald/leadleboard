@@ -20,6 +20,12 @@ The report attaches one PNG of stat cards. Each card uses the player's Discord a
 - One card for the leader of each game.
 
 Cards are two per row. With an odd card count, the MVP card is large on the left.
+A tied game leader card shows the tie count. The image is a message attachment above the
+embed, so Discord shows it at full width.
+
+The embed has two monospace tables: standings with points and game wins, and the best score
+for each game. Tables are at most 30 characters wide so they do not wrap on phones. Long
+standings continue in more fields.
 
 Cards use the Bebas Neue font (SIL Open Font License, `src/leadleboard/assets/OFL.txt`).
 If an avatar cannot be downloaded, the card shows the player's initials.
@@ -91,7 +97,8 @@ uv run leadleboard preview --output-dir .data/previews
 ```
 
 The Markdown keeps the message content, embed description, field values, and footer
-unchanged. Field names become `###` headings, and the last line links the highlight PNG.
+unchanged in Discord display order. The highlight PNG link follows the message content, and
+field names become `###` headings.
 Discord embed layout and color are stored in JSON. If Discord needs
 a text attachment, the preview saves its exact bytes as `.txt` and `.md` files.
 JSON also stores scores, ranks, query times, server and channel IDs, and collection time.

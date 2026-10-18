@@ -439,7 +439,7 @@ async def test_publish_report_sends_valid_fields_or_a_file(
     if expect_embed:
         embed = cast(discord.Embed, channel.sent["embed"])
         assert all(0 < len(field.value or "") <= 1024 for field in embed.fields)
-        assert embed.image.url == f"attachment://highlights-{PERIOD.week_start}.png"
+        assert not embed.image
 
 
 async def test_run_discord_action_requires_a_started_action(
