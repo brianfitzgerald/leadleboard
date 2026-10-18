@@ -84,6 +84,67 @@ a text attachment, the preview saves its exact bytes as `.txt` and `.md` files.
 JSON also stores scores, ranks, query times, server and channel IDs, and collection time.
 Repeated previews replace files for the same week in the selected directory.
 
+## Schedule on Modal
+
+The current Modal deployment uses Brian Test Server, channel `dle`. It runs Sunday at
+21:00 in `America/Chicago`, including daylight saving changes. It requests 0.125 CPU cores
+and 128 MiB RAM, with one container at a time and no warm containers. Actual resource use
+above these requests is billed by Modal. Each call has an 11-minute timeout and one retry.
+
+Install the development tools with `uv sync`. Use the existing Modal login, or run
+`uv run modal token new`. Create Secret `leadleboard-discord-test` in the Modal dashboard
+with `DISCORD_TOKEN`, `DISCORD_GUILD_ID`, and `DISCORD_CHANNEL_ID` for the test server.
+Do not put credentials in source files or command arguments.
+
+Create a stable v1 Volume named `leadleboard-state-test`. If local post history exists,
+upload `.data/post-state.json` as `/post-state.json` before the first deployment.
+Do not replace existing remote history on later deployments.
+
+Deploy from the repository root:
+
+```sh
+uv run modal deploy deploy/modal_app.py
+```
+
+Run read-only checks through the deployed function:
+
+```sh
+uv run modal run deploy/modal_app.py --action check
+uv run modal run deploy/modal_app.py --action preview
+```
+
+These commands call the deployed function; they do not invoke a second report writer.
+The preview uses the last complete week, which matches the deployment test post.
+To send one explicit test post:
+
+```sh
+uv run modal run deploy/modal_app.py --action test-post
+```
+
+`test-post` sends a real report to the test channel. Each call sends a message, including
+retries. It does not change post history. Use it only for deployment verification.
+Normal posting retains the state and Discord duplicate checks:
+
+```sh
+uv run modal run deploy/modal_app.py --action run
+```
+
+The scheduled call uses the same normal posting action. State is copied to temporary local
+storage for file locking, then saved to the Volume after a successful call. If a post succeeds
+before state is saved, the next call checks Discord for the existing report.
+Do not run a local posting schedule at the same time as Modal.
+
+Inspect private logs and stop the deployment with:
+
+```sh
+uv run modal app logs leadleboard
+uv run modal app stop leadleboard
+```
+
+Stopping the app also stops its schedule. Redeploy to start it again. A future production
+deployment must use separate secrets and state, and must replace the test schedule.
+Report logs can contain Discord names, IDs, and scores. Keep them private.
+
 ## Schedule on macOS
 
 `run` posts only during the first ten minutes after the configured Sunday report time. It
